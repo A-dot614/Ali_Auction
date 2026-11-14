@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aliauction-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aliauction
+      POSTGRES_PASSWORD: aliauction
+      POSTGRES_DB: aliauction_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - aliauction_pgdata:/var/lib/postgresql/data
+      # Intentionally NOT mounting initdb for auto-bootstrap.
+      # Schema source of truth is ordered migrations (see apps/api/migrations).
+      # infra/docker/initdb/001_starter_schema.sql is a non-authoritative local reference only.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aliauction -d aliauction_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aliauction-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - aliauction_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  aliauction_pgdata:
+  aliauction_redisdata:
