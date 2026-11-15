@@ -1,16 +1,20 @@
 import { config } from "../../config.js";
 import {
   authenticateSession,
+  getMyProfile,
+  listMySessions,
   login,
   logout,
   register,
   requestPasswordReset,
+  resendVerification,
   resetPassword,
+  revokeMySession,
+  updateMyProfile,
   verifyEmail,
   type AppUser,
 } from "../../auth/service.js";
-import { requireAuth, requireRole, type GraphQLContext } from "../../auth/authz.js";
-import { recordAudit } from "../../audit.js";
+import { requireAuth, requireRole, requireVerified, type GraphQLContext } from "../../auth/authz.js";
 
 function cookieOptions(expiresAt?: Date) {
   return {
@@ -49,6 +53,14 @@ export const identityResolvers = {
       }
       if (!ctx.user) return null;
       return userPayload(ctx.user);
+    },
+    myProfile: async (_: any, __: any, ctx: GraphQLContext) => {
+      const user = requireAuth(ctx);
+      return getMyProfile(user.id);
+    },
+    mySessions: async (_: any, __: any, ctx: GraphQLContext) => {
+      const user = requireAuth(ctx);
+      return listMySessions(user.id, ctx.currentSessionId || null);
     },
     adminHealth: async (_: any, __: any, ctx: GraphQLContext) => {
       requireRole(ctx, "admin");
@@ -90,11 +102,36 @@ export const identityResolvers = {
       await requestPasswordReset({ email, ip });
       return { ok: true, message: "If the account exists, a reset token has been sent." };
     },
+    resendVerification: async (_: any, { email }: any, ctx: GraphQLContext) => {
+      const ip = ctx.req?.ip || null;
+      await resendVerification({ email, ip });
+      return { ok: true, message: "If the account exists and is unverified, a verification token has been sent." };
+    },
     resetPassword: async (_: any, { input }: any, ctx: GraphQLContext) => {
       const ip = ctx.req?.ip || null;
       await resetPassword({ token: input.token, newPassword: input.newPassword, ip });
       clearSessionCookie(ctx);
       return { ok: true, message: "Password reset successful. Please log in again." };
+    },
+    updateMyProfile: async (_: any, { input }: any, ctx: GraphQLContext) => {
+      const user = requireAuth(ctx);
+      return updateMyProfile({
+        userId: user.id,
+        displayName: input.displayName,
+        bio: input.bio,
+        provinceCode: input.provinceCode,
+      });
+    },
+    revokeMySession: async (_: any, { sessionId }: any, ctx: GraphQLContext) => {
+      const user = requireAuth(ctx);
+      await revokeMySession({ userId: user.id, sessionId, actorUserId: user.id });
+      return { ok: true };
+    },
+    // Placeholder protected mutation (no domain side effects) to enforce and test
+    // "unverified users cannot perform protected mutations" until bid/listing/checkout exist.
+    protectedActionPing: async (_: any, __: any, ctx: GraphQLContext) => {
+      requireVerified(ctx);
+      return { ok: true, message: "Verified access granted." };
     },
   },
 };
@@ -102,14 +139,15 @@ export const identityResolvers = {
 // Context helper exported for server wiring
 export async function buildAuthContext(req: any, res: any): Promise<GraphQLContext> {
   const token = req?.cookies?.[config.session.cookieName] || null;
-  if (!token) return { req, res, user: null, sessionToken: null };
+  if (!token) return { req, res, user: null, sessionToken: null, currentSessionId: null };
   const auth = await authenticateSession(token);
-  if (!auth) return { req, res, user: null, sessionToken: token };
+  if (!auth) return { req, res, user: null, sessionToken: token, currentSessionId: null };
   const ctx: GraphQLContext & { rotatedToken?: string; rotatedExpiresAt?: Date } = {
     req,
     res,
     user: auth.user,
     sessionToken: auth.rotatedToken || token,
+    currentSessionId: auth.sessionId,
   };
   if (auth.rotatedToken) {
     ctx.rotatedToken = auth.rotatedToken;

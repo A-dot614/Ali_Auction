@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type pg from "pg";
-import { pool, query, withTransaction } from "../db.js";
+import { query, withTransaction } from "../db.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { generateToken, hashToken } from "./tokens.js";
 import { recordAudit } from "../audit.js";
@@ -151,16 +150,17 @@ async function createSession(
   client: pg.PoolClient,
   userId: string,
   opts: { ip?: string | null; userAgent?: string | null; rotatedFrom?: string | null }
-): Promise<{ sessionToken: string; expiresAt: Date }> {
+): Promise<{ sessionId: string; sessionToken: string; expiresAt: Date }> {
   const sessionToken = generateToken(32);
   const tokenHash = hashToken(sessionToken);
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-  await client.query(
+  const res = await client.query(
     `INSERT INTO sessions (user_id, token_hash, expires_at, rotated_from_session_id, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
     [userId, tokenHash, expiresAt, opts.rotatedFrom || null, opts.ip || null, opts.userAgent || null]
   );
-  return { sessionToken, expiresAt };
+  return { sessionId: res.rows[0].id as string, sessionToken, expiresAt };
 }
 
 export async function login(input: {
@@ -259,7 +259,7 @@ export async function authenticateSession(
     });
     return {
       user,
-      sessionId: row.id,
+      sessionId: rotated.sessionId,
       rotatedToken: rotated.sessionToken,
       rotatedExpiresAt: rotated.expiresAt,
     };
@@ -267,6 +267,52 @@ export async function authenticateSession(
 
   await query(`UPDATE sessions SET last_seen_at = now() WHERE id = $1`, [row.id]).catch(() => {});
   return { user, sessionId: row.id };
+}
+
+export async function revokeAllUserSessions(
+  userId: string,
+  opts?: { actorUserId?: string | null; reason?: string; action?: string }
+): Promise<void> {
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+      [userId]
+    );
+    await recordAudit(
+      {
+        actorUserId: opts?.actorUserId || userId,
+        action: opts?.action || "user.sessions_revoked",
+        targetType: "user",
+        targetId: userId,
+        reason: opts?.reason || null,
+        metadata: { scope: "all" },
+      },
+      client
+    );
+  });
+}
+
+export async function suspendUser(userId: string, actorUserId?: string | null, reason?: string): Promise<void> {
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE users SET status = 'suspended', updated_at = now() WHERE id = $1`,
+      [userId]
+    );
+    await client.query(
+      `UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+      [userId]
+    );
+    await recordAudit(
+      {
+        actorUserId: actorUserId || null,
+        action: "user.suspended",
+        targetType: "user",
+        targetId: userId,
+        reason: reason || null,
+      },
+      client
+    );
+  });
 }
 
 export async function logout(token: string | null | undefined, actorUserId?: string | null): Promise<void> {
@@ -356,6 +402,149 @@ export async function resetPassword(input: {
       },
       client
     );
+  });
+}
+
+export async function resendVerification(input: { email: string; ip?: string | null }): Promise<void> {
+  const email = normalizeEmail(input.email);
+  const res = await query(
+    `SELECT id, email_verified_at FROM users WHERE lower(email)=lower($1)`,
+    [email]
+  );
+  // Enumeration-safe: always succeed.
+  if ((res.rowCount ?? 0) === 0) return;
+  const row = res.rows[0];
+  if (row.email_verified_at) return;
+  const token = generateToken(32);
+  const tokenHash = hashToken(token);
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+       VALUES ($1, $2, now() + ($3 || ' milliseconds')::interval)`,
+      [row.id, tokenHash, String(VERIFY_TTL_MS)]
+    );
+    await recordAudit(
+      {
+        actorUserId: row.id,
+        action: "user.verification_resent",
+        targetType: "user",
+        targetId: row.id,
+        metadata: { ip: input.ip || null },
+      },
+      client
+    );
+  });
+  await sendVerificationEmail(email, token);
+}
+
+export type UserProfile = {
+  userId: string;
+  displayName: string | null;
+  bio: string | null;
+  provinceCode: string | null;
+};
+
+export async function getMyProfile(userId: string): Promise<UserProfile> {
+  const res = await query(
+    `SELECT user_id, display_name, bio, province_code FROM user_profiles WHERE user_id = $1`,
+    [userId]
+  );
+  if ((res.rowCount ?? 0) === 0) {
+    return { userId, displayName: null, bio: null, provinceCode: null };
+  }
+  const r = res.rows[0];
+  return {
+    userId: r.user_id,
+    displayName: r.display_name,
+    bio: r.bio,
+    provinceCode: r.province_code,
+  };
+}
+
+export async function updateMyProfile(input: {
+  userId: string;
+  displayName?: string | null;
+  bio?: string | null;
+  provinceCode?: string | null;
+}): Promise<UserProfile> {
+  // No email change without re-verification (email not accepted/updated here).
+  const displayName = input.displayName?.trim() ?? null;
+  const bio = input.bio?.trim() ?? null;
+  const provinceCode = input.provinceCode?.trim().toUpperCase() || null;
+  const res = await query(
+    `INSERT INTO user_profiles (user_id, display_name, bio, province_code, updated_at)
+     VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (user_id) DO UPDATE SET
+       display_name = EXCLUDED.display_name,
+       bio = EXCLUDED.bio,
+       province_code = EXCLUDED.province_code,
+       updated_at = now()
+     RETURNING user_id, display_name, bio, province_code`,
+    [input.userId, displayName, bio, provinceCode]
+  );
+  await recordAudit({
+    actorUserId: input.userId,
+    action: "user.profile_updated",
+    targetType: "user_profile",
+    targetId: input.userId,
+  }).catch(() => {});
+  const r = res.rows[0];
+  return {
+    userId: r.user_id,
+    displayName: r.display_name,
+    bio: r.bio,
+    provinceCode: r.province_code,
+  };
+}
+
+export type SessionView = {
+  id: string;
+  createdAt: Date;
+  lastSeenAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  isCurrent: boolean;
+};
+
+export async function listMySessions(userId: string, currentSessionId?: string | null): Promise<SessionView[]> {
+  const res = await query(
+    `SELECT id, created_at, last_seen_at, expires_at, revoked_at, ip_address, user_agent
+     FROM sessions WHERE user_id = $1 ORDER BY created_at DESC`,
+    [userId]
+  );
+  return res.rows.map((r: any) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    lastSeenAt: r.last_seen_at,
+    expiresAt: r.expires_at,
+    revokedAt: r.revoked_at,
+    ipAddress: r.ip_address,
+    userAgent: r.user_agent,
+    isCurrent: currentSessionId ? r.id === currentSessionId : false,
+  }));
+}
+
+export async function revokeMySession(input: {
+  userId: string;
+  sessionId: string;
+  actorUserId: string;
+}): Promise<void> {
+  const res = await query(
+    `UPDATE sessions SET revoked_at = now()
+     WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+     RETURNING id`,
+    [input.sessionId, input.userId]
+  );
+  if ((res.rowCount ?? 0) === 0) {
+    throw new Error("NOT_FOUND: Session not found.");
+  }
+  await recordAudit({
+    actorUserId: input.actorUserId,
+    action: "user.session_revoked",
+    targetType: "session",
+    targetId: input.sessionId,
   });
 }
 

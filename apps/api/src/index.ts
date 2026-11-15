@@ -41,11 +41,11 @@ export function createApp() {
     });
   });
 
-  // Rate limit auth-sensitive GraphQL operations (register/login/reset) via coarse endpoint limits.
+  // Rate limit auth-sensitive GraphQL operations via coarse endpoint limits.
   // TODO(docs/10): per-operation limits and Redis-backed limiter for distributed deployments.
   app.use("/graphql", (req, res, next) => {
     const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
-    if (/requestPasswordReset|resetPassword|register|login/.test(body)) {
+    if (/requestPasswordReset|resetPassword|register|login|resendVerification/.test(body)) {
       return strictAuthRateLimiter(req, res, next);
     }
     return authRateLimiter(req, res, next);
@@ -84,7 +84,6 @@ const isDirectRun = process.argv[1] && resolve(process.argv[1]).endsWith("index.
 if (isDirectRun) {
   const app = createApp();
   app.listen(config.apiPort, () => {
-    // eslint-disable-next-line no-console
     console.log(`AliAuction API listening on http://localhost:${config.apiPort}`);
     console.log(`GraphQL endpoint: http://localhost:${config.apiPort}/graphql`);
   });

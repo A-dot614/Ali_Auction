@@ -12,7 +12,6 @@ export class ConsoleEmailProvider implements EmailProvider {
   async send(message: EmailMessage): Promise<void> {
     // Dev/console implementation - provider-agnostic interface for future SMTP/provider.
     // Do not log secrets/tokens in production integrations; dev-only visibility.
-    // eslint-disable-next-line no-console
     console.log("[email:dev]", JSON.stringify({ ...message }, null, 2));
   }
 }
