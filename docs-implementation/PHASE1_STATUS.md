@@ -59,6 +59,11 @@
 **Verification:**
 - Fresh DB reset + `DATABASE_URL='postgresql://aliauction:aliauction@localhost:5433/aliauction_dev' npx node-pg-migrate -m apps/api/migrations up` — OK (baseline and identity migrations applied).
 
+**Correction (migration roundtrip false positive):**
+- Earlier reports marked the migration roundtrip as passing. That check had a false positive: the down step rolled back one migration, and the script printed success anyway.
+- The corrected script (commit SHA `20e95b299e153873d8b18f9bf37be5ade3704dcb`) now asserts the expected migration list at every step.
+- The migration gate is verified only after a green CI run on that SHA.
+
 ## Step 3 — Identity & access slice (completed for requested scope)
 
 **Implemented (API, `apps/api`):**
