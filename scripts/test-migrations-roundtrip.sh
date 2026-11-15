@@ -66,3 +66,33 @@ echo "[migrations] up (again)"
 run_migrate up
 
 echo "[migrations] roundtrip OK"
+echo "[migrations] down (one migration per step)"
+for i in $(seq 1 20); do
+  remaining=$(run_psql "$DB_NAME" -tA -c "select count(*) from pgmigrations" | tr -d '[:space:]')
+  [[ "$remaining" -eq 0 ]] && break
+  run_migrate down
+done
+remaining=$(run_psql "$DB_NAME" -tA -c "select count(*) from pgmigrations" | tr -d '[:space:]')
+if [[ "$remaining" -ne 0 ]]; then
+  echo "[migrations] FAIL: $remaining migration(s) still recorded after down" >&2
+  exit 1
+fi
+echo "[migrations] up"
+run_migrate up
+
+echo "[migrations] down (one migration per step)"
+for i in $(seq 1 20); do
+  remaining=$(run_psql "$DB_NAME" -tA -c "select count(*) from pgmigrations" | tr -d '[:space:]')
+  [[ "$remaining" -eq 0 ]] && break
+  run_migrate down
+done
+remaining=$(run_psql "$DB_NAME" -tA -c "select count(*) from pgmigrations" | tr -d '[:space:]')
+if [[ "$remaining" -ne 0 ]]; then
+  echo "[migrations] FAIL: $remaining migration(s) still recorded after down" >&2
+  exit 1
+fi
+
+echo "[migrations] up (again)"
+run_migrate up
+
+echo "[migrations] roundtrip OK"
