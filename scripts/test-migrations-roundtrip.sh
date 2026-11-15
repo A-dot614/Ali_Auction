@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Connection parameters may come from DATABASE_URL (CI service container / local
+# docker compose) or explicit MIGRATION_DB_* overrides. Explicit overrides win.
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  # Parse postgresql://user:password@host:port/dbname
+  _db_url="${DATABASE_URL}"
+  _db_path="${_db_url#*://}"
+  _db_userinfo="${_db_path%%@*}"
+  _db_hostport="${_db_path#*@}"
+  _db_hostport="${_db_hostport%%/*}"
+  _db_host="${_db_hostport%%:*}"
+  _db_port="${_db_hostport##*:}"
+  _db_user="${_db_userinfo%%:*}"
+  _db_password="${_db_userinfo#*:}"
+  MIGRATION_DB_HOST="${MIGRATION_DB_HOST:-$_db_host}"
+  MIGRATION_DB_PORT="${MIGRATION_DB_PORT:-$_db_port}"
+  MIGRATION_DB_USER="${MIGRATION_DB_USER:-$_db_user}"
+  MIGRATION_DB_PASSWORD="${MIGRATION_DB_PASSWORD:-$_db_password}"
+fi
+
 DB_HOST="${MIGRATION_DB_HOST:-localhost}"
 DB_PORT="${MIGRATION_DB_PORT:-5433}"
 DB_USER="${MIGRATION_DB_USER:-aliauction}"

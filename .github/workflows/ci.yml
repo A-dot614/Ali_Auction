@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "phase1/**"]
   pull_request:
+    branches: ["main", "phase1/**"]
 
 jobs:
   validate:
@@ -44,7 +45,7 @@ jobs:
           version: 9.15.4
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
         run: pnpm -r --if-present typecheck
@@ -52,23 +53,21 @@ jobs:
       - name: Lint
         run: pnpm -r --if-present lint
 
+      - name: Migrate up (CI database)
+        run: pnpm --filter @aliauction/api migrate:up
+        env:
+          DATABASE_URL: postgresql://aliauction:aliauction@localhost:5432/aliauction_ci
+
       - name: Test
         run: pnpm -r --if-present test
 
       - name: Build
         run: pnpm -r --if-present build
 
-      - name: Migrate up (CI database)
-        run: pnpm --filter @aliauction/api migrate:up
-        env:
-          DATABASE_URL: postgresql://aliauction:aliauction@localhost:5432/aliauction_ci
-
       - name: Migration roundtrip (up/down/up on scratch database)
         run: pnpm migrate:test
         env:
-          MIGRATION_DB_HOST: localhost
-          MIGRATION_DB_PORT: 5432
-          MIGRATION_DB_USER: aliauction
-          MIGRATION_DB_PASSWORD: aliauction
+          DATABASE_URL: postgresql://aliauction:aliauction@localhost:5432/aliauction_ci
+          MIGRATION_DB_NAME: aliauction_migrate_test
           MIGRATION_ADMIN_DB: postgres
           PGPASSWORD: aliauction
