@@ -12,9 +12,9 @@ Implementation workspace for the AliAuction.ca Canadian auction marketplace, boo
 - `apps/web` — Next.js web app (public + authenticated routes scaffold)
 - `apps/api` — Node.js/Express GraphQL API scaffold (`/health`, `/graphql`)
 - `packages/shared` — shared types/constants placeholder
-- `infra/docker` — local PostgreSQL + Redis and starter DB bootstrap SQL
+- `infra/docker` — local PostgreSQL + Redis for development (no initdb auto-bootstrap)
 - `docs-implementation` — implementation tracking and notes
-- `.github/workflows/ci.yml` — CI skeleton
+- `.github/workflows/ci.yml` — CI workflow
 
 ## Local development (foundation)
 
@@ -25,12 +25,18 @@ Prerequisites: Node.js >= 20, pnpm, Docker.
 cp .env.example .env
 
 # 2) Start local data services
+# Default local ports: PostgreSQL 5433, Redis 6380 (mapped to avoid conflicts with common local services)
 docker compose -f infra/docker/docker-compose.yml up -d
 
 # 3) Install dependencies
 pnpm install
 
-# 4) Run apps in parallel
+# 4) Apply authoritative database migrations
+cd apps/api
+DATABASE_URL='postgresql://aliauction:aliauction@localhost:5433/aliauction_dev' pnpm migrate:up
+cd ../..
+
+# 5) Run apps in parallel
 pnpm dev
 ```
 
@@ -38,7 +44,7 @@ pnpm dev
 - API health: http://localhost:4000/health
 - API GraphQL: http://localhost:4000/graphql
 
-> Note: the Docker init script loads a **starter schema** for local development. Review and split into proper migrations before production use (`docs/05-postgresql-starter-schema.sql.md`).
+> Database schema source of truth is ordered migrations in `apps/api/migrations/` (see `apps/api/MIGRATIONS.md`). `docs/05-postgresql-starter-schema.sql.md` is a draft input only. The former initdb bootstrap SQL copy was removed once migration tooling became authoritative.
 
 ## Important caveats
 

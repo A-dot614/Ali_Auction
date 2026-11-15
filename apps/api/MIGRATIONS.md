@@ -4,7 +4,7 @@ This directory contains **ordered, reviewed migrations** for AliAuction's Postgr
 
 ## Source of truth
 - Migrations here are the intended schema source of truth for environments.
-- `infra/docker/initdb/001_starter_schema.sql` is a **non-authoritative local reference** copied from `docs/05-postgresql-starter-schema.sql.md` (draft). Do not use initdb bootstrap as production or migration truth.
+- `docs/05-postgresql-starter-schema.sql.md` remains a **draft** input only (not executable migration truth). The former local initdb bootstrap copy (`infra/docker/initdb/001_starter_schema.sql`) was removed after migration tooling became authoritative; do not reintroduce initdb auto-bootstrap as schema truth.
 
 ## Review process
 1. Treat `docs/05-postgresql-starter-schema.sql.md` and related docs as draft inputs only; review naming, constraints, privacy, indexing, retention, and provider requirements before codifying.

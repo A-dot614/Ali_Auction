@@ -8,6 +8,7 @@
     "apps/*",
     "packages/*"
   ],
+  "pnpmWorkspaceNote": "Recursive pnpm runs (pnpm -r) target workspace packages in pnpm-workspace.yaml: apps/api, apps/web, packages/shared (3). Root orchestrates via top-level scripts and is not a recursive workspace target.",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
@@ -19,5 +20,13 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^15.15.0",
+    "typescript-eslint": "^8.72.2"
   }
 }

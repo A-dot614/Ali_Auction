@@ -12,8 +12,7 @@ services:
     volumes:
       - aliauction_pgdata:/var/lib/postgresql/data
       # Intentionally NOT mounting initdb for auto-bootstrap.
-      # Schema source of truth is ordered migrations (see apps/api/migrations).
-      # infra/docker/initdb/001_starter_schema.sql is a non-authoritative local reference only.
+      # Schema source of truth is ordered migrations (see apps/api/migrations, apps/api/MIGRATIONS.md).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aliauction -d aliauction_dev"]
       interval: 5s

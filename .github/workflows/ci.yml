@@ -8,6 +8,27 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aliauction
+          POSTGRES_PASSWORD: aliauction
+          POSTGRES_DB: aliauction_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aliauction -d aliauction_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://aliauction:aliauction@localhost:5432/aliauction_ci
+      REDIS_URL: redis://localhost:6379
+      APP_URL: http://localhost:3000
+      JWT_SECRET: ci-secret-not-for-production
+      SESSION_COOKIE_NAME: aliauction_session
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,3 +57,18 @@ jobs:
 
       - name: Build
         run: pnpm -r --if-present build
+
+      - name: Migrate up (CI database)
+        run: pnpm --filter @aliauction/api migrate:up
+        env:
+          DATABASE_URL: postgresql://aliauction:aliauction@localhost:5432/aliauction_ci
+
+      - name: Migration roundtrip (up/down/up on scratch database)
+        run: pnpm migrate:test
+        env:
+          MIGRATION_DB_HOST: localhost
+          MIGRATION_DB_PORT: 5432
+          MIGRATION_DB_USER: aliauction
+          MIGRATION_DB_PASSWORD: aliauction
+          MIGRATION_ADMIN_DB: postgres
+          PGPASSWORD: aliauction
