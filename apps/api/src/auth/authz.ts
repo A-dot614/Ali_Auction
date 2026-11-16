@@ -1,5 +1,10 @@
 import type { AppUser } from "./service.js";
 
+export type AuctionRuntimeConfig = {
+  auction: { bidIncrementMinor: number };
+  features: { liveBiddingEnabled: boolean };
+};
+
 export type GraphQLContext = {
   req: any;
   res: any;
@@ -8,6 +13,8 @@ export type GraphQLContext = {
   currentSessionId?: string | null;
   rotatedToken?: string;
   rotatedExpiresAt?: Date;
+  // Test-only override; production leaves this unset so config.features keeps bidding closed.
+  auctionConfig?: AuctionRuntimeConfig;
 };
 
 export function requireAuth(ctx: GraphQLContext): AppUser {

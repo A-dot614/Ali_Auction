@@ -6,6 +6,7 @@ import { createApp } from "../src/index.js";
 import { query } from "../src/db.js";
 import { grantRole } from "../src/auth/service.js";
 import { schema } from "../src/graphql/schema.js";
+import { config } from "../src/config.js";
 import { createAuction, getAuction, auctionForListing, placeBid, setProxyBid } from "../src/auction/service.js";
 
 const app = createApp();
@@ -145,6 +146,11 @@ async function countOutbox(auctionId: string): Promise<number> {
   return res.rows[0].c;
 }
 
+async function countAuctionEvents(auctionId: string): Promise<number> {
+  const res = await query(`SELECT count(*)::int as c FROM auction_events WHERE auction_id=$1`, [auctionId]);
+  return res.rows[0].c;
+}
+
 describe("auction create (Slice 4a)", () => {
   beforeAll(async () => {
     await query("SELECT 1");
@@ -202,6 +208,76 @@ describe("auction create (Slice 4a)", () => {
     });
     expect(res.body.errors?.[0]?.message || "").toContain("INVALID_SCHEDULE");
   });
+
+  it("createAuction rejects a second auction for the same listing (AUCTION_ALREADY_EXISTS)", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-dupe-create-${Date.now()}@example.com`);
+    const startsAt = new Date(Date.now() + 86_400_000).toISOString();
+    const endsAt = new Date(Date.now() + 86_400_000 * 8).toISOString();
+    const variables = { input: { listingId, startsAt, endsAt, startingPriceMinor: 2500 } };
+
+    const first = await gql({
+      query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
+      variables,
+      cookie: seller.cookie,
+    });
+    expect(first.body.errors).toBeUndefined();
+
+    const second = await gql({
+      query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
+      variables,
+      cookie: seller.cookie,
+    });
+    expect(second.body.errors?.[0]?.message || "").toContain("AUCTION_ALREADY_EXISTS");
+  });
+
+  it("createAuction rejects a non-positive startingPriceMinor (VALIDATION_ERROR)", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-bad-price-${Date.now()}@example.com`);
+    const res = await gql({
+      query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
+      variables: {
+        input: {
+          listingId,
+          startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+          endsAt: new Date(Date.now() + 86_400_000 * 8).toISOString(),
+          startingPriceMinor: 0,
+        },
+      },
+      cookie: seller.cookie,
+    });
+    expect(res.body.errors?.[0]?.message || "").toContain("VALIDATION_ERROR");
+  });
+
+  it("createAuction rejects endsAt <= startsAt (VALIDATION_ERROR)", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-bad-window-${Date.now()}@example.com`);
+    const startsAt = new Date(Date.now() + 86_400_000);
+    const res = await gql({
+      query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
+      variables: { input: { listingId, startsAt: startsAt.toISOString(), endsAt: startsAt.toISOString(), startingPriceMinor: 2500 } },
+      cookie: seller.cookie,
+    });
+    expect(res.body.errors?.[0]?.message || "").toContain("VALIDATION_ERROR");
+  });
+
+  it("two concurrent createAuction calls for one listing: exactly one succeeds, the other is AUCTION_ALREADY_EXISTS", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-race-create-${Date.now()}@example.com`);
+    const input = {
+      listingId,
+      startsAt: new Date(FIXED_NOW.getTime() + 60_000),
+      endsAt: new Date(FIXED_NOW.getTime() + 3_600_000),
+      startingPriceMinor: 2500,
+    };
+    const results = await Promise.allSettled([
+      createAuction(seller.userId, input, { now: () => FIXED_NOW }),
+      createAuction(seller.userId, input, { now: () => FIXED_NOW }),
+    ]);
+    const fulfilled = results.filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled");
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason.message).toContain("AUCTION_ALREADY_EXISTS");
+    const rows = await query(`SELECT count(*)::int AS c FROM auctions WHERE listing_id=$1`, [listingId]);
+    expect(rows.rows[0].c).toBe(1);
+  });
 });
 
 describe("placeBid (Slice 4a)", () => {
@@ -235,6 +311,8 @@ describe("placeBid (Slice 4a)", () => {
 
     const atStart = await placeBid(await insertBidderUser(`auc-bidder2-${Date.now()}@example.com`), { auctionId: auction.id, amountMinor: 2500, requestId: "11111111-1111-4111-8111-111111111102" }, { now: () => startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(atStart.accepted).toBe(true);
+    const persisted = await query(`SELECT accepted_at FROM bids WHERE id=$1`, [atStart.bid!.id]);
+    expect(new Date(persisted.rows[0].accepted_at).getTime()).toBe(startsAt.getTime());
 
     const atEnd = await placeBid(await insertBidderUser(`auc-bidder3-${Date.now()}@example.com`), { auctionId: auction.id, amountMinor: 2500, requestId: "11111111-1111-4111-8111-111111111103" }, { now: () => endsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(atEnd.accepted).toBe(false);
@@ -290,22 +368,62 @@ describe("placeBid (Slice 4a)", () => {
     const second = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2550, requestId: "11111111-1111-4111-8111-111111111109" }, { now: () => auction.startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(second.accepted).toBe(false);
     expect(second.error?.code).toBe("BID_TOO_LOW");
+    const afterReject = await query(`SELECT current_price_minor FROM auctions WHERE id=$1`, [auction.id]);
+    expect(Number(afterReject.rows[0].current_price_minor)).toBe(2500);
+    expect(await countBids(auction.id)).toBe(beforeCount);
     const third = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2600, requestId: "11111111-1111-4111-8111-111111111110" }, { now: () => auction.startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(third.accepted).toBe(true);
     const afterCount = await countBids(auction.id);
     expect(afterCount).toBe(beforeCount + 1);
   });
 
-  it("same request_id twice returns the original bid and creates exactly one bid row", async () => {
+  it("same request_id twice returns the original bid and auction snapshot; replay writes nothing even after a later bid", async () => {
     const { seller, listingId } = await makeSellerWithPublishedListing(`auc-idem-${Date.now()}@example.com`);
     const auction = await setupOpenAuction(seller.userId, listingId, 2500);
     const bidderUserId = await insertBidderUser(`auc-idem-bidder-${Date.now()}@example.com`);
-    const first = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2500, requestId: "11111111-1111-4111-8111-111111111111" }, { now: () => auction.startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
+    const requestId = "11111111-1111-4111-8111-111111111111";
+    const first = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2500, requestId }, { now: () => auction.startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(first.accepted).toBe(true);
-    const second = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2500, requestId: "11111111-1111-4111-8111-111111111111" }, { now: () => auction.startsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
-    expect(second.accepted).toBe(true);
-    expect(second.bid?.id).toBe(first.bid?.id);
-    expect(await countBids(auction.id)).toBe(1);
+    expect(first.auction).not.toBeNull();
+
+    const afterFirst = {
+      bids: await countBids(auction.id),
+      outbox: await countOutbox(auction.id),
+      events: await countAuctionEvents(auction.id),
+    };
+    expect(afterFirst).toEqual({ bids: 1, outbox: 1, events: 2 });
+
+    const replay = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2500, requestId }, { now: () => new Date(auction.startsAt.getTime() + 30_000), bidIncrementMinor: 100, liveBiddingEnabled: true });
+    expect(replay.accepted).toBe(true);
+    expect(replay.bid?.id).toBe(first.bid?.id);
+    expect(replay.auction).toEqual(first.auction);
+    expect({
+      bids: await countBids(auction.id),
+      outbox: await countOutbox(auction.id),
+      events: await countAuctionEvents(auction.id),
+    }).toEqual(afterFirst);
+
+    // A later accepted bid changes the live auction, but the original replay must still return its snapshot.
+    const laterBidder = await insertBidderUser(`auc-idem-later-${Date.now()}@example.com`);
+    const later = await placeBid(laterBidder, { auctionId: auction.id, amountMinor: 2600, requestId: randomUUID() }, { now: () => new Date(auction.startsAt.getTime() + 60_000), bidIncrementMinor: 100, liveBiddingEnabled: true });
+    expect(later.accepted).toBe(true);
+    expect(later.auction?.currentPriceMinor).toBe("2600");
+    const afterLater = {
+      bids: await countBids(auction.id),
+      outbox: await countOutbox(auction.id),
+      events: await countAuctionEvents(auction.id),
+    };
+    expect(afterLater).toEqual({ bids: 2, outbox: 2, events: 2 });
+
+    const replayAfterLater = await placeBid(bidderUserId, { auctionId: auction.id, amountMinor: 2500, requestId }, { now: () => new Date(auction.startsAt.getTime() + 90_000), bidIncrementMinor: 100, liveBiddingEnabled: true });
+    expect(replayAfterLater.accepted).toBe(true);
+    expect(replayAfterLater.bid?.id).toBe(first.bid?.id);
+    expect(replayAfterLater.auction).toEqual(first.auction);
+    expect({
+      bids: await countBids(auction.id),
+      outbox: await countOutbox(auction.id),
+      events: await countAuctionEvents(auction.id),
+    }).toEqual(afterLater);
   });
 
   it("different request_id with the same amount creates a new bid", async () => {
@@ -357,6 +475,62 @@ describe("placeBid (Slice 4a)", () => {
     ).rejects.toThrow("forced failure after insert");
     expect(await countOutbox(auction.id)).toBe(1);
     expect(await countBids(auction.id)).toBe(1);
+  });
+
+  it("placeBid GraphQL success path accepts a bid and uses config.auction.bidIncrementMinor", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-gql-bid-${Date.now()}@example.com`);
+    const realNow = Date.now();
+    const auction = await createAuction(
+      seller.userId,
+      {
+        listingId,
+        startsAt: new Date(realNow - 60_000),
+        endsAt: new Date(realNow + 3_600_000),
+        startingPriceMinor: 2500,
+      },
+      { now: () => new Date(realNow - 120_000) }
+    );
+    const bidderUserId = await insertBidderUser(`auc-gql-bidder-${Date.now()}@example.com`);
+    const increment = config.auction.bidIncrementMinor;
+    expect(increment).toBeGreaterThan(0);
+    const contextValue = {
+      req: {},
+      res: {},
+      user: { id: bidderUserId, email_verified_at: new Date(), roles: [] },
+      auctionConfig: { auction: { bidIncrementMinor: increment }, features: { liveBiddingEnabled: true } },
+    };
+    const source = `mutation($input: PlaceBidInput!){ placeBid(input:$input){ accepted bid { id amount { minorUnits currency } acceptedAt bidderLabel } auction { currentPrice { minorUnits } } error { code message } } }`;
+    const call = (amountMinor: number) =>
+      graphql({
+        schema,
+        source,
+        variableValues: { input: { auctionId: auction.id, amountMinor, requestId: randomUUID() } },
+        contextValue,
+      });
+
+    const first = await call(2500);
+    expect(first.errors).toBeUndefined();
+    expect((first.data as any).placeBid.accepted).toBe(true);
+    expect((first.data as any).placeBid.bid.amount).toEqual({ minorUnits: 2500, currency: "CAD" });
+
+    const belowIncrement = await call(2500 + increment - 1);
+    expect(belowIncrement.errors).toBeUndefined();
+    expect((belowIncrement.data as any).placeBid.accepted).toBe(false);
+    expect((belowIncrement.data as any).placeBid.error.code).toBe("BID_TOO_LOW");
+
+    const atIncrement = await call(2500 + increment);
+    expect(atIncrement.errors).toBeUndefined();
+    expect((atIncrement.data as any).placeBid.accepted).toBe(true);
+    expect((atIncrement.data as any).placeBid.bid.amount.minorUnits).toBe(2500 + increment);
+    expect((atIncrement.data as any).placeBid.auction.currentPrice.minorUnits).toBe(2500 + increment);
+  });
+
+  it("setProxyBid returns NOT_IMPLEMENTED_PENDING_DECISION through GraphQL", async () => {
+    const res = await gql({
+      query: `mutation($input: SetProxyBidInput!){ setProxyBid(input:$input) }`,
+      variables: { input: { auctionId: randomUUID(), maxAmountMinor: 10_000 } },
+    });
+    expect(res.body.errors?.[0]?.message || "").toContain("NOT_IMPLEMENTED_PENDING_DECISION");
   });
 
   it("flag OFF: placeBid returns LIVE_BIDDING_DISABLED and writes nothing", async () => {
@@ -413,5 +587,63 @@ describe("auction public queries (Slice 4a)", () => {
     const slugRes = await query(`SELECT l.slug AS slug FROM listings l WHERE l.id=$1`, [listingId]);
     const bySlug = await auctionForListing((slugRes.rows[0] as any).slug);
     expect(bySlug).not.toBeNull();
+  });
+
+  it("Auction.bids returns public accepted bid history paginated by accepted_at and id", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-pub-bids-${Date.now()}@example.com`);
+    const auction = await createAuction(
+      seller.userId,
+      { listingId, startsAt: new Date(FIXED_NOW.getTime() + 60_000), endsAt: new Date(FIXED_NOW.getTime() + 3_600_000), startingPriceMinor: 2500 },
+      { now: () => FIXED_NOW }
+    );
+    const startsAt = auction.startsAt;
+    const amounts = [2500, 2600, 2700];
+    for (let i = 0; i < amounts.length; i++) {
+      const bidderUserId = await insertBidderUser(`auc-pub-bidder-${Date.now()}-${i}@example.com`);
+      const res = await placeBid(
+        bidderUserId,
+        { auctionId: auction.id, amountMinor: amounts[i], requestId: randomUUID() },
+        { now: () => new Date(startsAt.getTime() + i * 1000), bidIncrementMinor: 100, liveBiddingEnabled: true }
+      );
+      expect(res.accepted).toBe(true);
+    }
+
+    const firstPage = await gql({
+      query: `query($id:ID!){ auction(id:$id){ startsAt bids(first:2){ items { amount { minorUnits currency } acceptedAt bidderLabel } endCursor } } }`,
+      variables: { id: auction.id },
+    });
+    expect(firstPage.body.errors).toBeUndefined();
+    const firstData = firstPage.body.data.auction;
+    expect(firstData.startsAt).toBe(startsAt.toISOString());
+    expect(firstData.bids.items.map((b: any) => b.amount.minorUnits)).toEqual([2700, 2600]);
+    for (const item of firstData.bids.items) {
+      expect(item).not.toHaveProperty("bidderUserId");
+      expect(item.bidderLabel).toMatch(/^bidder-[0-9a-f]{16}$/);
+      expect(item.amount.currency).toBe("CAD");
+      expect(new Date(item.acceptedAt).toISOString()).toBe(item.acceptedAt);
+    }
+    expect(typeof firstData.bids.endCursor).toBe("string");
+
+    const secondPage = await gql({
+      query: `query($id:ID!, $after:String){ auction(id:$id){ bids(first:1, after:$after){ items { amount { minorUnits } } endCursor } } }`,
+      variables: { id: auction.id, after: firstData.bids.endCursor },
+    });
+    expect(secondPage.body.errors).toBeUndefined();
+    expect(secondPage.body.data.auction.bids.items.map((b: any) => b.amount.minorUnits)).toEqual([2500]);
+  });
+
+  it("getAuction and auctionForListing return NOT_FOUND for paused or removed listings", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-pub-hidden-${Date.now()}@example.com`);
+    const auction = await createAuction(
+      seller.userId,
+      { listingId, startsAt: new Date(FIXED_NOW.getTime() + 60_000), endsAt: new Date(FIXED_NOW.getTime() + 3_600_000), startingPriceMinor: 2500 },
+      { now: () => FIXED_NOW }
+    );
+    const slug = (await query(`SELECT slug FROM listings WHERE id=$1`, [listingId])).rows[0].slug as string;
+    for (const status of ["paused", "removed"]) {
+      await query(`UPDATE listings SET status=$2 WHERE id=$1`, [listingId, status]);
+      await expect(getAuction(auction.id)).rejects.toThrow(/NOT_FOUND/);
+      await expect(auctionForListing(slug)).rejects.toThrow(/NOT_FOUND/);
+    }
   });
 });

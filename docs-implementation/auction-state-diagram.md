@@ -39,12 +39,12 @@ Cancel-after-bids is **OPEN** (TODO docs/16 §3 #9) and not implemented. There i
 
 `placeBid` runs in one DB transaction:
 
-1. `SELECT … FROM auctions WHERE id = $1 FOR UPDATE` (serializes concurrent bids).
-2. If `bids.request_id` already exists: return the original bid, write nothing new.
+1. Read the injected clock once (`const at`), then `SELECT … FROM auctions WHERE id = $1 FOR UPDATE` (serializes concurrent bids).
+2. If `bids.request_id` already exists: return the original bid and the auction snapshot captured immediately after that bid (from the outbox payload), write nothing new.
 3. Reject if the bidder owns the listing (`SELLER_CANNOT_BID`).
-4. Reject unless status is `scheduled|active` and `starts_at <= now < ends_at` (`AUCTION_NOT_OPEN`).
+4. Reject unless status is `scheduled|active` and `starts_at <= at < ends_at` (`AUCTION_NOT_OPEN`).
 5. Reject if `amount_minor < minimumBidMinor(...)` (`BID_TOO_LOW`).
-6. Insert the bid (`bid_type='manual'`, server `accepted_at`), update `current_price_minor`, transition `scheduled → active` when needed, and insert one `outbox_events` row.
+6. Insert the bid (`bid_type='manual'`, `accepted_at = at`), update `current_price_minor`/`updated_at = at`, transition `scheduled → active` when needed, and insert one `outbox_events` row (`created_at = at`) with the post-bid snapshot used for replay.
 7. Commit.
 
 Rejected bids write no bid, price, event, outbox, or audit rows. Accepted bids write **no audit row** in Slice 4a: the immutable `bids` ledger plus `outbox_events` is the record (documented decision; revisit if audit policy changes).

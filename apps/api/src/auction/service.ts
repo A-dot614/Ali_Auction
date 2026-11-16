@@ -43,6 +43,11 @@ export type BidPublic = {
   bidderLabel: string;
 };
 
+export type BidConnection = {
+  items: BidPublic[];
+  endCursor: string | null;
+};
+
 export type BidResult = {
   accepted: boolean;
   bid: BidPublic | null;
@@ -124,62 +129,89 @@ function mapBidPublic(row: any, bidderUserId: string): BidPublic {
   };
 }
 
+function bidCursor(bid: BidPublic): string {
+  return `${new Date(bid.acceptedAt).toISOString()}|${bid.id}`;
+}
+
+function parseBidCursor(cursor: string): { acceptedAt: Date; id: string } {
+  const sep = cursor.lastIndexOf("|");
+  const timestamp = sep > 0 ? cursor.slice(0, sep) : "";
+  const id = sep > 0 ? cursor.slice(sep + 1) : "";
+  const acceptedAt = new Date(timestamp);
+  if (!timestamp || !id || Number.isNaN(acceptedAt.getTime())) {
+    throw new Error("VALIDATION_ERROR: Invalid bid cursor.");
+  }
+  return { acceptedAt, id };
+}
+
 export async function createAuction(
   actorUserId: string,
   input: CreateAuctionInput,
   opts?: { now?: () => Date }
 ): Promise<Auction> {
   const now = opts?.now ?? (() => new Date());
-  const listingRes = await query(`SELECT * FROM listings WHERE id = $1`, [input.listingId]);
-  if ((listingRes.rowCount ?? 0) === 0) {
-    throw new Error("NOT_FOUND: Listing not found.");
-  }
-  const listing = listingRes.rows[0];
-  if (listing.status !== "published") {
-    throw new Error("LISTING_NOT_PUBLISHED: Only published listings can have an auction.");
-  }
-  const spRes = await query(`SELECT user_id FROM seller_profiles WHERE id = $1`, [listing.seller_profile_id]);
-  const sellerUserId = (spRes.rows[0]?.user_id as string) ?? null;
-  if (sellerUserId !== actorUserId) {
-    throw new Error("NOT_FOUND: Auction not found for this listing.");
-  }
-  const existing = await query(`SELECT id FROM auctions WHERE listing_id = $1`, [input.listingId]);
-  if ((existing.rowCount ?? 0) > 0) {
-    throw new Error("AUCTION_ALREADY_EXISTS: Auction already exists for this listing.");
-  }
+  // One clock read per operation; use it for every check and persisted timestamp.
+  const at = now();
   const startsAt = input.startsAt;
   const endsAt = input.endsAt;
-  if (!(startsAt > now())) {
+  if (!(startsAt > at)) {
     throw new Error("INVALID_SCHEDULE: Auction starts_at must be strictly after server now.");
   }
   if (!(endsAt > startsAt)) {
     throw new Error("VALIDATION_ERROR: Auction ends_at must be after starts_at.");
   }
   const startingPriceMinor = toMinOrThrow(input.startingPriceMinor);
-  return withTransaction(async (client) => {
-    const res = await client.query(
-      `INSERT INTO auctions (listing_id, status, currency, starting_price_minor, reserve_price_minor, current_price_minor, starts_at, ends_at, winning_bid_id, closed_at, created_at, updated_at)
-       VALUES ($1, 'scheduled', 'CAD', $2, NULL, $2, $3, $4, NULL, NULL, now(), now())
-       RETURNING *`,
-      [input.listingId, startingPriceMinor, startsAt, endsAt]
-    );
-    const auction = mapAuction(res.rows[0]);
-    await recordAudit(
-      {
-        actorUserId,
-        action: "auction.created",
-        targetType: "auction",
-        targetId: auction.id,
-        metadata: { listingId: input.listingId, status: auction.status },
-      },
-      client
-    );
-    await client.query(
-      `INSERT INTO auction_events (auction_id, from_status, to_status, actor_user_id) VALUES ($1, NULL, 'scheduled', $2)`,
-      [auction.id, actorUserId]
-    );
-    return auction;
-  });
+
+  try {
+    return await withTransaction(async (client) => {
+      // Lock the listing so ownership/status and the one-auction-per-listing check cannot race.
+      const listingRes = await client.query(`SELECT * FROM listings WHERE id = $1 FOR UPDATE`, [input.listingId]);
+      if ((listingRes.rowCount ?? 0) === 0) {
+        throw new Error("NOT_FOUND: Listing not found.");
+      }
+      const listing = listingRes.rows[0];
+      if (listing.status !== "published") {
+        throw new Error("LISTING_NOT_PUBLISHED: Only published listings can have an auction.");
+      }
+      const spRes = await client.query(`SELECT user_id FROM seller_profiles WHERE id = $1`, [listing.seller_profile_id]);
+      const sellerUserId = (spRes.rows[0]?.user_id as string) ?? null;
+      if (sellerUserId !== actorUserId) {
+        throw new Error("NOT_FOUND: Auction not found for this listing.");
+      }
+      const existing = await client.query(`SELECT id FROM auctions WHERE listing_id = $1`, [input.listingId]);
+      if ((existing.rowCount ?? 0) > 0) {
+        throw new Error("AUCTION_ALREADY_EXISTS: Auction already exists for this listing.");
+      }
+      const res = await client.query(
+        `INSERT INTO auctions (listing_id, status, currency, starting_price_minor, reserve_price_minor, current_price_minor, starts_at, ends_at, winning_bid_id, closed_at, created_at, updated_at)
+         VALUES ($1, 'scheduled', 'CAD', $2, NULL, $2, $3, $4, NULL, NULL, $5, $5)
+         RETURNING *`,
+        [input.listingId, startingPriceMinor, startsAt, endsAt, at]
+      );
+      const auction = mapAuction(res.rows[0]);
+      await recordAudit(
+        {
+          actorUserId,
+          action: "auction.created",
+          targetType: "auction",
+          targetId: auction.id,
+          metadata: { listingId: input.listingId, status: auction.status },
+        },
+        client
+      );
+      await client.query(
+        `INSERT INTO auction_events (auction_id, from_status, to_status, actor_user_id, created_at) VALUES ($1, NULL, 'scheduled', $2, $3)`,
+        [auction.id, actorUserId, at]
+      );
+      return auction;
+    });
+  } catch (err: any) {
+    // The explicit check above runs under a row lock; this also covers a raw unique violation.
+    if (err?.code === "23505" && (!err.constraint || err.constraint === "auctions_listing_id_key")) {
+      throw new Error("AUCTION_ALREADY_EXISTS: Auction already exists for this listing.");
+    }
+    throw err;
+  }
 }
 
 export async function getAuction(id: string): Promise<Auction | null> {
@@ -208,6 +240,39 @@ export async function auctionForListing(slug: string): Promise<Auction | null> {
   return mapAuction(row);
 }
 
+// Public users see accepted bid history but not proxy maximums (docs/16 §2).
+export async function auctionBids(
+  auctionId: string,
+  opts: { first?: number | null; after?: string | null }
+): Promise<BidConnection> {
+  const limit = Math.min(Math.max(opts.first ?? 20, 1), 100);
+  const publicAuction = await query(
+    `SELECT a.id FROM auctions a JOIN listings l ON l.id = a.listing_id WHERE a.id = $1 AND l.status = 'published'`,
+    [auctionId]
+  );
+  if ((publicAuction.rowCount ?? 0) === 0) {
+    throw new Error("NOT_FOUND: Auction not found.");
+  }
+
+  const params: any[] = [auctionId];
+  let cursorClause = "";
+  if (opts.after) {
+    const cursor = parseBidCursor(opts.after);
+    params.push(cursor.acceptedAt, cursor.id);
+    cursorClause = `AND (b.accepted_at, b.id) < ($2::timestamptz, $3::uuid)`;
+  }
+  params.push(limit);
+  const res = await query(
+    `SELECT b.* FROM bids b
+     WHERE b.auction_id = $1 ${cursorClause}
+     ORDER BY b.accepted_at DESC, b.id DESC
+     LIMIT $${params.length}`,
+    params
+  );
+  const items = res.rows.map((row) => mapBidPublic(row, row.bidder_user_id));
+  return { items, endCursor: items.length > 0 ? bidCursor(items[items.length - 1]) : null };
+}
+
 export async function placeBid(
   bidderUserId: string,
   input: PlaceBidInput,
@@ -230,6 +295,8 @@ export async function placeBid(
       throw new Error("NOT_FOUND: Auction not found.");
     }
     const auction = auctionRes.rows[0];
+    // Single clock read for the whole transaction (checks and persisted timestamps).
+    const at = now();
 
     // Idempotency: same request_id returns the original bid and writes nothing new.
     const existingBid = await client.query(`SELECT * FROM bids WHERE request_id = $1`, [input.requestId]);
@@ -238,8 +305,29 @@ export async function placeBid(
       if (existing.auction_id !== input.auctionId || existing.bidder_user_id !== bidderUserId) {
         throw new Error("REQUEST_ID_CONFLICT: request_id was already used for a different bid.");
       }
+      // Replay the auction snapshot captured immediately after the original bid (outbox payload).
+      const snapshotRow = await client.query(
+        `SELECT payload FROM outbox_events
+         WHERE aggregate_type = 'auction' AND aggregate_id = $1
+           AND event_type = 'auction.bid.accepted' AND payload->>'bidId' = $2
+         ORDER BY created_at DESC LIMIT 1`,
+        [input.auctionId, existing.id]
+      );
+      const snapshot = snapshotRow.rows[0]?.payload as
+        | { currentPriceMinor?: number; statusAfter?: string; updatedAt?: string }
+        | undefined;
+      const replayedAuction = mapAuction(auction);
+      if (snapshot?.currentPriceMinor != null) {
+        replayedAuction.currentPriceMinor = String(snapshot.currentPriceMinor);
+      }
+      if (snapshot?.statusAfter) {
+        replayedAuction.status = snapshot.statusAfter as AuctionStatus;
+      }
+      if (snapshot?.updatedAt) {
+        replayedAuction.updatedAt = new Date(snapshot.updatedAt);
+      }
       const bidPublic = mapBidPublic(existing, existing.bidder_user_id);
-      return { accepted: true, bid: bidPublic, auction: mapAuction(auction), error: null };
+      return { accepted: true, bid: bidPublic, auction: replayedAuction, error: null };
     }
 
     // Seller cannot bid on own listing.
@@ -261,8 +349,8 @@ export async function placeBid(
       (auction.status === "scheduled" || auction.status === "active") &&
       auction.starts_at instanceof Date &&
       auction.ends_at instanceof Date &&
-      auction.starts_at <= now() &&
-      now() < auction.ends_at;
+      auction.starts_at <= at &&
+      at < auction.ends_at;
     if (!isOpen) {
       return {
         accepted: false,
@@ -294,9 +382,9 @@ export async function placeBid(
     // Accept: insert bid, update price/status, write outbox event, no audit row (immutable ledger decision).
     const bidRes = await client.query(
       `INSERT INTO bids (auction_id, bidder_user_id, amount_minor, currency, bid_type, request_id, accepted_at, created_at)
-       VALUES ($1,$2,$3,'CAD','manual',$4, now(), now())
+       VALUES ($1,$2,$3,'CAD','manual',$4,$5,$5)
        RETURNING *`,
-      [input.auctionId, bidderUserId, input.amountMinor, input.requestId]
+      [input.auctionId, bidderUserId, input.amountMinor, input.requestId, at]
     );
     const insertedBid = bidRes.rows[0];
     const bidPublic = mapBidPublic(insertedBid, bidderUserId);
@@ -305,30 +393,45 @@ export async function placeBid(
     if (auction.status === "scheduled") {
       assertTransition("scheduled", "active");
       await client.query(
-        `UPDATE auctions SET current_price_minor=$2, status='active', updated_at=now() WHERE id=$1`,
-        [input.auctionId, input.amountMinor]
+        `UPDATE auctions SET current_price_minor=$2, status='active', updated_at=$3 WHERE id=$1`,
+        [input.auctionId, input.amountMinor, at]
       );
       await client.query(
-        `INSERT INTO auction_events (auction_id, from_status, to_status, actor_user_id)
-         VALUES ($1, 'scheduled', 'active', $2)`,
-        [input.auctionId, bidderUserId]
+        `INSERT INTO auction_events (auction_id, from_status, to_status, actor_user_id, created_at)
+         VALUES ($1, 'scheduled', 'active', $2, $3)`,
+        [input.auctionId, bidderUserId, at]
       );
     } else {
       await client.query(
-        `UPDATE auctions SET current_price_minor=$2, updated_at=now() WHERE id=$1`,
-        [input.auctionId, input.amountMinor]
+        `UPDATE auctions SET current_price_minor=$2, updated_at=$3 WHERE id=$1`,
+        [input.auctionId, input.amountMinor, at]
       );
     }
+    const updatedAuction = await client.query(`SELECT * FROM auctions WHERE id = $1`, [input.auctionId]);
+    const updatedRow = updatedAuction.rows[0];
     await client.query(
       `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
-       VALUES ('auction', $1, 'auction.bid.accepted', $2::jsonb, now())`,
-      [input.auctionId, JSON.stringify({ auctionId: input.auctionId, bidId: insertedBid.id, bidderUserId, amountMinor: input.amountMinor, requestId: input.requestId })]
+       VALUES ('auction', $1, 'auction.bid.accepted', $2::jsonb, $3)`,
+      [
+        input.auctionId,
+        JSON.stringify({
+          auctionId: input.auctionId,
+          bidId: insertedBid.id,
+          bidderUserId,
+          amountMinor: input.amountMinor,
+          requestId: input.requestId,
+          // Snapshot immediately after this bid, replayed verbatim for idempotent retries.
+          currentPriceMinor: Number(updatedRow.current_price_minor),
+          statusAfter: updatedRow.status,
+          updatedAt: new Date(updatedRow.updated_at).toISOString(),
+        }),
+        at,
+      ]
     );
-    const updatedAuction = await client.query(`SELECT * FROM auctions WHERE id = $1`, [input.auctionId]);
     const result: BidResult = {
       accepted: true,
       bid: bidPublic,
-      auction: mapAuction(updatedAuction.rows[0]),
+      auction: mapAuction(updatedRow),
       error: null,
     };
     if (opts?.beforeCommit) {

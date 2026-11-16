@@ -248,20 +248,6 @@ const MoneyType = new GraphQLObjectType({
   },
 });
 
-const AuctionType = new GraphQLObjectType({
-  name: "Auction",
-  fields: {
-    id: { type: new GraphQLNonNull(GraphQLID) },
-    listingId: { type: new GraphQLNonNull(GraphQLID) },
-    status: { type: new GraphQLNonNull(AuctionStatusEnum) },
-    currentPrice: { type: new GraphQLNonNull(MoneyType) },
-    startingPriceMinor: { type: new GraphQLNonNull(GraphQLInt) },
-    endsAt: { type: new GraphQLNonNull(GraphQLString) },
-    createdAt: { type: new GraphQLNonNull(GraphQLString) },
-    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
-  },
-});
-
 const BidType = new GraphQLObjectType({
   name: "Bid",
   fields: {
@@ -270,6 +256,35 @@ const BidType = new GraphQLObjectType({
     acceptedAt: { type: new GraphQLNonNull(GraphQLString) },
     // Opaque bidder label only; bidder user id is never exposed (docs/16 §2).
     bidderLabel: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const BidConnectionType = new GraphQLObjectType({
+  name: "BidConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(BidType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+const AuctionType = new GraphQLObjectType({
+  name: "Auction",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    listingId: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(AuctionStatusEnum) },
+    currentPrice: { type: new GraphQLNonNull(MoneyType) },
+    startingPriceMinor: { type: new GraphQLNonNull(GraphQLInt) },
+    startsAt: { type: new GraphQLNonNull(GraphQLString) },
+    endsAt: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+    // Public accepted bid history; bidder identities stay opaque (docs/16 §2).
+    bids: {
+      type: new GraphQLNonNull(BidConnectionType),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: auctionResolvers.Auction.bids,
+    },
   },
 });
 
