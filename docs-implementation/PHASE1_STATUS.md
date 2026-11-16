@@ -2,7 +2,7 @@
 
 **Roadmap source:** `docs/15-delivery-roadmap.md`  
 **Scope basis:** `docs/01-product-requirements-document.md`, `docs/02-epics-user-stories.md`  
-**Last updated:** 2026-11-16 (Slice 3a completed; Slice 3b listing moderation + public visibility completed; stopped before Slice 4)
+**Last updated:** 2026-11-16 (Slice 3a/3b catalogue completed; Slice 4a auction creation + manual bidding behind flag completed; stopped before Slice 4b)
 
 ## Phase 1 workstreams
 
@@ -11,8 +11,8 @@
 | 1 | Identity and account management | In progress | Implemented: registration, login, logout, email verification, password reset (provider-agnostic email interface with dev console provider), bcrypt password hashing, DB-backed session tokens in HttpOnly/SameSite cookies with rotation and revocation on logout/reset, roles baseline (`buyer`,`seller`,`admin`), server-side GraphQL authz checks, audit logging helper + sensitive auth events, auth rate limiting, unit/integration/authz tests. Not yet: MFA (FR-008/P1, policy/open decisions), profile management UI/API, full account lifecycle, email delivery provider integration, production-grade session hardening/CSRF posture review for final deployment. |
 | 2 | Seller profile and basic verification workflow | Not started | Identity roles seeded (`seller`), but seller profile/verification entities and workflows not migrated/implemented. Verification requirements/policies are open decisions. |
 | 3 | Categories and listing management | In progress (Slice 3a completed; Slice 3b moderation/public visibility completed for requested scope; auction scope pending) | Slice 3a implemented: placeholder categories (seeded `is_placeholder=true`, "PLACEHOLDER - NOT APPROVED"), listing drafts/create/update/submit, `myListings`, public `listing(slug)` (published-only, public-safe fields), listing state machine module, migration/tests/docs. Slice 3b added staff-only moderation mutations (approve/reject/pause/resume/remove) with `SELECT ... FOR UPDATE` concurrency control, audit logging decision (`listing.*` + `listing.transition_rejected`), self-moderation forbidden, and public visibility for all statuses. **No auctions/bids/scheduling enforcement** (requested times draft-only/non-binding). Moderation policy/UI/SLAs (docs/16 §8 #3, §8 #6, §7 #5, §7 #6) and seller notifications (Slice 8) remain open. |
-| 4 | Timed auction engine | Not started (blocked) | **No live bidding enabled.** Feature flag `FEATURE_LIVE_BIDDING_ENABLED` defaults to `false` and is enforced off at API startup. Auction rules/increments/close behavior require approved decisions. |
-| 5 | Manual bidding and approved proxy-bidding baseline | Not started (blocked) | **No live bidding enabled.** Depends on approved bidding/proxy/tie/extension rules (`docs/07`, `docs/16`). |
+| 4 | Timed auction engine | Partial (Slice 4a completed; close/snipe/reserve pending) | **Live bidding OFF by default.** Slice 4a added auctions/auction_events/outbox schema, auction state machine (`scheduled→active`; cancel only with no bids), and owner-only `createAuction` for published listings. Auction close/winner determination, snipe protection, reserve handling, and the outbox publisher remain Slice 4b+. |
+| 5 | Manual bidding and approved proxy-bidding baseline | Partial (Slice 4a manual bidding; proxy pending) | **Live bidding OFF by default; enabled for no user.** Slice 4a added flag-gated `placeBid` (server UTC window, idempotent `request_id`, transaction + row lock, minimum-bid placeholder increment, one outbox row per accepted bid) and public `auction`/`auctionForListing` queries. Proxy bidding/tie-breaking not implemented (`proxy_bids` unused; `setProxyBid` → `NOT_IMPLEMENTED_PENDING_DECISION`). |
 | 6 | Search and browsing | Not started | No search/browse implementation; Postgres vs Elasticsearch for MVP is an open decision. |
 | 7 | Checkout and selected payment provider | Not started (blocked) | **No real-money payments enabled.** Feature flag `FEATURE_REAL_MONEY_PAYMENTS_ENABLED` defaults to `false` and enforced off. Provider/charge/capture/payout/escrow decisions open; sandbox-only future work required. |
 | 8 | Orders and basic fulfilment | Not started | No order/fulfilment implementation in this slice. |
@@ -117,7 +117,7 @@ npx -y pnpm@9.15.4 dev
 References: `docs/16-assumptions-decisions-and-open-questions.md` (and related docs).
 
 - **Identity/verification/policy:** email verification enforcement timing for protected actions, MFA requirements/enforcement (FR-008/P1), buyer/seller/business verification requirements, age/access policies, retention/deletion/privacy request workflows, suspension/appeals effects (`docs/16` §3, §7).
-- **Auction/bidding (blocked, not implemented):** auction type/increments, bid semantics, proxy max/tie-breaking, snipe protection/extension limits, reserves/visibility, cancellation/non-payment outcomes, eligibility/payment-method requirements (`docs/07`, `docs/16` §3). `FEATURE_LIVE_BIDDING_ENABLED=false` enforced.
+- **Auction/bidding (Slice 4a placeholder implemented behind an OFF flag):** auction format, bid semantics, increments, proxy max/tie-breaking, snipe protection/extension limits, reserves/visibility, cancellation-after-bids, non-payment outcomes, eligibility/payment-method requirements remain **OPEN** (`docs/07`, `docs/16` §3 #1–#9). Slice 4a implements English-ascending-only manual bidding placeholders only; `FEATURE_LIVE_BIDDING_ENABLED=false` enforced at startup and bidding enabled for no user.
 - **Fees/payments/payouts/escrow (blocked, not implemented):** commission payer/base/rates/refunds, provider/charge/capture model, KYC/payout timing, escrow meaning/legal approval (`docs/16` §4, §5). `FEATURE_REAL_MONEY_PAYMENTS_ENABLED=false` enforced.
 - **Shipping/fulfilment:** shipping/pickup rules, provinces, carriers, dispute/loss handling (`docs/16` §6).
 - **Product/ops/legal/compliance:** categories/moderation model, support/SLA, RPO/RTO, rollout, analytics approvals, terms/privacy/auction-rules disclosures and required Canadian legal/privacy/payment/tax reviews (`docs/10`, `docs/16` §8, §10).
@@ -327,4 +327,55 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 - **§7 #6** Rejection appeal path: **OPEN** — rejected→draft owner revision implemented; formal appeal workflow remains future slice (`docs/16` §7 #6).
 - **Slice 8** Seller notifications on reject/pause/remove: **TODO** (no inline email implemented in 3b).
 
-**Workstream status:** #3 Categories and listing management — **In progress (Slice 3a + Slice 3b completed for requested scope; Slice 4 auction engine blocked/not started)**. No auctions/bids/scheduling enforcement implemented. Live bidding and real-money payments remain **OFF** by enforced defaults.
+**Workstream status:** #3 Categories and listing management — **In progress (Slice 3a + Slice 3b completed for requested scope)**. Slice 4a subsequently added auction schema + manual bidding behind an OFF flag (see below); auction close/proxy/snipe/reserve remain pending. Live bidding and real-money payments remain **OFF** by enforced defaults.
+
+## Slice 4a — Auction creation and manual bidding behind flag (workstreams 4 & 5, partial)
+
+**Scope:** auction creation and manual bidding only. **Not implemented:** auction close/winner determination, outbox publisher, proxy bidding, snipe protection, reserve enforcement, real-time events (Slice 4b+).
+
+**Migration (reviewed):** `apps/api/migrations/1700000000500_auctions_bids_slice4a.js`
+- `auctions`: id, `listing_id` unique FK listings, `status` enum `scheduled|active|closed_sold|closed_unsold|cancelled` (no `extended`), `currency char(3)` default/CHECK CAD, `starting_price_minor bigint > 0`, `reserve_price_minor bigint` nullable **unused**, `current_price_minor bigint >= 0`, `starts_at`/`ends_at timestamptz` with `CHECK (ends_at > starts_at)`, `winning_bid_id`, `closed_at`, timestamps; index `(status, ends_at DESC)`.
+- `bids`: id, auction FK, bidder user FK, `amount_minor bigint > 0`, CAD check, `bid_type` enum `manual` only, `request_id uuid UNIQUE NOT NULL`, server `accepted_at`, `created_at`; indexes `(auction_id, accepted_at DESC)` and `(auction_id, amount_minor DESC)`. No update/delete path in the service.
+- `proxy_bids`: created but **unused** in 4a; unique `(auction_id, bidder_user_id)`.
+- `auction_events`: id, auction FK, `from_status` nullable / `to_status` text, `actor_user_id` nullable, `created_at`.
+- `outbox_events`: id, `aggregate_type`, `aggregate_id`, `event_type`, `payload jsonb`, `created_at`, `published_at` nullable. Written transactionally in 4a; **published in 4b**.
+- Working down migration; verified by the roundtrip script (expected list updated to include `1700000000500_auctions_bids_slice4a`).
+
+**State machine:** `apps/api/src/auction/auctionStateMachine.ts` (single module; no resolver writes status)
+- Allowed: `scheduled → active` (first accepted bid at/after `starts_at`). Every transition writes one `auction_events` row.
+- `active → closed_sold | closed_unsold` **deferred to Slice 4b**; all other pairs throw `INVALID_AUCTION_TRANSITION`.
+- Cancel: `canCancel(from, hasBids)` allows only `scheduled` with **no bids** (staff action, reason required by policy). Cancel-after-bids is **OPEN** (TODO docs/16 §3 #9); no cancel mutation is exposed in 4a.
+- State diagram: `docs-implementation/auction-state-diagram.md`.
+
+**Service/operations & GraphQL:** `apps/api/src/auction/service.ts`, `apps/api/src/auction/minimumBid.ts`, `apps/api/src/graphql/resolvers/auction.ts`, schema/types in `apps/api/src/graphql/schema.ts`
+- `createAuction(listingId, startsAt, endsAt, startingPriceMinor)`: owner of the listing's seller profile only (non-owner → `NOT_FOUND`), listing must be `published` (`LISTING_NOT_PUBLISHED`), one auction per listing (`AUCTION_ALREADY_EXISTS`), `startsAt` strictly after injected server clock (`INVALID_SCHEDULE`), `endsAt > startsAt`, integer minor units > 0. Writes one audit row (`auction.created`) and the creation `auction_events` row in one transaction.
+- `getAuction(id)` / `auctionForListing(slug)`: public-safe auction fields only; non-published listings → `NOT_FOUND`. No bidder user ids, proxy rows, reserve, or internal fields exposed.
+- `placeBid(auctionId, amountMinor, requestId)`: requires verified email and `FEATURE_LIVE_BIDDING_ENABLED` (otherwise `LIVE_BIDDING_DISABLED`; fail-closed unless explicitly enabled by injected config in tests). One transaction: `SELECT … FOR UPDATE` on the auction; idempotent `request_id` returns the original bid and writes nothing new (conflicting reuse → `REQUEST_ID_CONFLICT`); seller cannot bid (`SELLER_CANNOT_BID`); open only if status `scheduled|active` and `starts_at <= server now < ends_at` (`AUCTION_NOT_OPEN`); minimum is starting price for the first bid, else `current_price + increment` (`BID_TOO_LOW`). On success: insert bid, update `current_price_minor`, transition `scheduled→active` via the state machine + event row, insert exactly one `outbox_events` row (`auction.bid.accepted`). Rejected bids write nothing.
+- **Audit decision (documented, Slice 4a):** accepted bids write **no** audit row; the immutable `bids` ledger plus `outbox_events` is the record. Revisit if the audit policy changes.
+- `setProxyBid`: always throws `NOT_IMPLEMENTED_PENDING_DECISION` (TODO docs/16 §3 #4).
+- GraphQL: `AuctionStatus`, `Money`, `Auction` (public), `Bid` (amount, acceptedAt, opaque `bidderLabel`; no bidder id), `BidError`, `BidResult`; queries `auction(id)`, `auctionForListing(slug)`; mutations `createAuction`, `placeBid`; `setProxyBid` reserved and throwing. `bidderLabel` = `bidder-<first 16 hex of sha256(userId)>`.
+
+**Config/placeholders (NOT FOR PRODUCTION; docs/16 §3):**
+- **§3 #1** Auction format: assumed **English ascending only**; not approved.
+- **§3 #2** Bid input: placeholder = submitted amount is the **next bid amount**; proxy/maximum input not accepted.
+- **§3 #3** Increments: placeholder single `AUCTION_BID_INCREMENT_MINOR`, default `100` minor units (CAD $1.00); no band/category schedule; not hardcoded in the resolver.
+- **§3 #4** Proxy tie-breaking: not implemented; `proxy_bids` exists unused; proxy path throws `NOT_IMPLEMENTED_PENDING_DECISION`.
+- **§3 #5** Snipe window: disabled; no extension logic; no `extended` status.
+- **§3 #6** Extension cap: not implemented (snipe disabled).
+- **§3 #7** Reserve: disabled; `reserve_price_minor` nullable and unused.
+- **§3 #8** Reserve visibility: not implemented.
+- **§3 #9** Cancel after first bid: OPEN; only no-bid `scheduled` cancellation allowed by policy.
+
+**Tests (API, Vitest):**
+- `apps/api/test/auction-state.test.ts`: state machine exposes allowed transitions per state, allows every allowed pair, disallows every disallowed pair, cancel only with no bids; minimum-bid calculation for first vs subsequent bids using the placeholder increment (and an injected custom increment).
+- `apps/api/test/integration-auction.test.ts` (flag enabled via injected config, injected clock): owner creates auction for own published listing + non-owner `NOT_FOUND`; unpublished listing rejected; `startsAt` not after server now (`INVALID_SCHEDULE`); bid before `starts_at` rejected / at `starts_at` accepted / at `ends_at` rejected / 1 ms before `ends_at` accepted; bid after `ends_at` rejected and writes no bid row; seller cannot bid (`SELLER_CANNOT_BID`); unverified bidder (`EMAIL_NOT_VERIFIED`); below-minimum `BID_TOO_LOW` leaves price/rows unchanged; same `request_id` twice returns original bid with exactly one row; different `request_id` same amount creates a new bid; 20 parallel distinct bids record exactly the accepted bids with `current_price_minor = max accepted` (no lost update); accepted bid writes exactly one outbox row and a forced post-insert failure rolls it back; flag OFF returns `LIVE_BIDDING_DISABLED` and writes nothing; `setProxyBid` returns `NOT_IMPLEMENTED_PENDING_DECISION`; public queries never expose bidder user ids or proxy rows; public auction queries return data for published listings.
+
+**Verification (local, 2026-11-16):**
+- `npx -y pnpm@9.15.4 lint` — **OK** (`Scope: 3 of 4 workspace projects`; api/web/shared Done)
+- `npx -y pnpm@9.15.4 -r typecheck` — **OK** (`Scope: 3 of 4`)
+- `npx -y pnpm@9.15.4 -r test -- --reporter=verbose` — **OK** (Scope 3 of 4; API **9 files / 62 tests passed**, incl. 2 new Slice 4a files / 21 tests; shared/web pass)
+- `npx -y pnpm@9.15.4 -r build` — **OK** (logged to `logs/full-build-slice4a.log`; api/shared/web Done)
+- `bash scripts/test-migrations-roundtrip.sh` — **OK** (`[migrations] roundtrip OK`; includes `1700000000500_auctions_bids_slice4a` up/down/up)
+- Migration applied to dev DB (`aliauction_dev`, port 5433).
+
+**Workstream status:** #4 Timed auction engine and #5 Manual bidding — **partial** (Slice 4a only). Live bidding is **code-complete behind `FEATURE_LIVE_BIDDING_ENABLED` but enabled for no user**; the flag stays OFF by default and is asserted OFF at production startup. Auction close, outbox publishing, proxy bidding, snipe protection, reserve enforcement, and real-time events remain **Slice 4b+**. **Stopped before Slice 4b.**

@@ -31,6 +31,13 @@ export const config = {
       secureCookies: env("NODE_ENV", "development") === "production",
     };
   },
+  // Auction placeholders (Slice 4a). TODO(docs/16 §3): approved increment schedule by band/category is OPEN.
+  get auction() {
+    return {
+      // Placeholder bid increment: single value, default 100 minor units (CAD $1.00). Not final (docs/16 §3 #3).
+      bidIncrementMinor: Number(env("AUCTION_BID_INCREMENT_MINOR", "100")),
+    };
+  },
 };
 
 export function assertSafeFeatureFlags() {

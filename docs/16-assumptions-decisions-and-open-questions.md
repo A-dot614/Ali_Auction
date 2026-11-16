@@ -52,6 +52,20 @@ These are proposed implementation defaults, not confirmed requirements:
 13. Are deposits or pre-authorizations required for high-value bids?
 14. What happens if a user is suspended while bidding?
 
+### Slice 4a placeholder decisions (recorded 2026-11-16)
+
+Slice 4a implements auction creation and manual bidding behind `FEATURE_LIVE_BIDDING_ENABLED`, which remains **OFF by default** and is asserted off at API startup. Live bidding is code-complete but **enabled for no user**. The items below remain **OPEN**; the values in Slice 4a are placeholders, marked `NOT FOR PRODUCTION` in code and not approved rules.
+
+- **§3 #1 Auction format:** the Slice 4a data model assumes **English ascending auctions only**. Not approved; no other format is implemented.
+- **§3 #2 Bid input semantics:** placeholder = the submitted `amountMinor` is the **next bid amount** (not a maximum/proxy bid). Proxy/maximum input is rejected via `setProxyBid` → `NOT_IMPLEMENTED_PENDING_DECISION`.
+- **§3 #3 Bid increments:** placeholder = **one configured increment**, `AUCTION_BID_INCREMENT_MINOR`, default `100` minor units (CAD $1.00). No price-band/category schedule; not hardcoded in resolvers.
+- **§3 #4 Proxy tie-breaking:** **not implemented**. The `proxy_bids` table is created but unused; any proxy path throws `NOT_IMPLEMENTED_PENDING_DECISION`.
+- **§3 #5 Snipe-protection window/extension:** **disabled**. No trigger window, no extension logic, and no `extended` auction status.
+- **§3 #6 Maximum number of extensions:** **not implemented** (snipe protection disabled, so no extension cap applies yet).
+- **§3 #7 Reserve prices in MVP:** **disabled**. `auctions.reserve_price_minor` exists as a nullable column and is unset/unused in Slice 4a.
+- **§3 #8 Reserve status visible to bidders:** **not implemented** (reserve disabled).
+- **§3 #9 Seller cancellation after the first bid:** **OPEN**. The state machine allows cancellation only from `scheduled` with no bids; cancel-after-bid is not implemented.
+
 ## 4. Decisions required for fees and revenue
 
 1. Is the 8% commission charged to buyer, seller or split?

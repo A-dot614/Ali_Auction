@@ -13,6 +13,7 @@ import {
 import { identityResolvers } from "./resolvers/identity.js";
 import { sellerResolvers } from "./resolvers/seller.js";
 import { catalogueResolvers } from "./resolvers/catalogue.js";
+import { auctionResolvers } from "./resolvers/auction.js";
 
 const HealthType = new GraphQLObjectType({
   name: "Health",
@@ -228,6 +229,95 @@ const PublicListingType = new GraphQLObjectType({
   },
 });
 
+const AuctionStatusEnum = new GraphQLEnumType({
+  name: "AuctionStatus",
+  values: {
+    scheduled: { value: "scheduled" },
+    active: { value: "active" },
+    closed_sold: { value: "closed_sold" },
+    closed_unsold: { value: "closed_unsold" },
+    cancelled: { value: "cancelled" },
+  },
+});
+
+const MoneyType = new GraphQLObjectType({
+  name: "Money",
+  fields: {
+    minorUnits: { type: new GraphQLNonNull(GraphQLInt) },
+    currency: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const AuctionType = new GraphQLObjectType({
+  name: "Auction",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    listingId: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(AuctionStatusEnum) },
+    currentPrice: { type: new GraphQLNonNull(MoneyType) },
+    startingPriceMinor: { type: new GraphQLNonNull(GraphQLInt) },
+    endsAt: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const BidType = new GraphQLObjectType({
+  name: "Bid",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    amount: { type: new GraphQLNonNull(MoneyType) },
+    acceptedAt: { type: new GraphQLNonNull(GraphQLString) },
+    // Opaque bidder label only; bidder user id is never exposed (docs/16 §2).
+    bidderLabel: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const BidErrorType = new GraphQLObjectType({
+  name: "BidError",
+  fields: {
+    code: { type: GraphQLString },
+    message: { type: GraphQLString },
+  },
+});
+
+const BidResultType = new GraphQLObjectType({
+  name: "BidResult",
+  fields: {
+    accepted: { type: new GraphQLNonNull(GraphQLBoolean) },
+    bid: { type: BidType },
+    auction: { type: AuctionType },
+    error: { type: BidErrorType },
+  },
+});
+
+const CreateAuctionInput = new GraphQLInputObjectType({
+  name: "CreateAuctionInput",
+  fields: {
+    listingId: { type: new GraphQLNonNull(GraphQLID) },
+    startsAt: { type: new GraphQLNonNull(GraphQLString) },
+    endsAt: { type: new GraphQLNonNull(GraphQLString) },
+    startingPriceMinor: { type: new GraphQLNonNull(GraphQLInt) },
+  },
+});
+
+const PlaceBidInput = new GraphQLInputObjectType({
+  name: "PlaceBidInput",
+  fields: {
+    auctionId: { type: new GraphQLNonNull(GraphQLID) },
+    amountMinor: { type: new GraphQLNonNull(GraphQLInt) },
+    requestId: { type: new GraphQLNonNull(GraphQLID) },
+  },
+});
+
+const SetProxyBidInput = new GraphQLInputObjectType({
+  name: "SetProxyBidInput",
+  fields: {
+    auctionId: { type: new GraphQLNonNull(GraphQLID) },
+    maxAmountMinor: { type: new GraphQLNonNull(GraphQLInt) },
+  },
+});
+
 const AuthPayload = new GraphQLObjectType({
   name: "AuthPayload",
   fields: {
@@ -379,6 +469,16 @@ const QueryType = new GraphQLObjectType({
       args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
       resolve: catalogueResolvers.Query.pendingListingReviews,
     },
+    auction: {
+      type: AuctionType,
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: auctionResolvers.Query.auction,
+    },
+    auctionForListing: {
+      type: AuctionType,
+      args: { slug: { type: new GraphQLNonNull(GraphQLString) } },
+      resolve: auctionResolvers.Query.auctionForListing,
+    },
   },
 });
 
@@ -495,6 +595,21 @@ const MutationType = new GraphQLObjectType({
       type: new GraphQLNonNull(ListingType),
       args: { id: { type: new GraphQLNonNull(GraphQLID) }, reason: { type: GraphQLString } },
       resolve: catalogueResolvers.Mutation.removeListing,
+    },
+    createAuction: {
+      type: AuctionType,
+      args: { input: { type: new GraphQLNonNull(CreateAuctionInput) } },
+      resolve: auctionResolvers.Mutation.createAuction,
+    },
+    placeBid: {
+      type: BidResultType,
+      args: { input: { type: new GraphQLNonNull(PlaceBidInput) } },
+      resolve: auctionResolvers.Mutation.placeBid,
+    },
+    setProxyBid: {
+      type: GraphQLBoolean,
+      args: { input: { type: new GraphQLNonNull(SetProxyBidInput) } },
+      resolve: auctionResolvers.Mutation.setProxyBid,
     },
   },
 });
