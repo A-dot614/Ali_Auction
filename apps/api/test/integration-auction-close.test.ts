@@ -306,26 +306,55 @@ describe("auction close (Slice 4b)", () => {
     expect((await query(`SELECT count(*)::int AS c FROM bids WHERE auction_id=$1`, [auction.id])).rows[0].c).toBe(before);
   });
 
-  it("parallel race: concurrent placeBid calls and one closeAuction at the boundary end consistently with one close event", async () => {
+  it("bids placed strictly before the boundary are all accepted and the highest bid wins", async () => {
     const auction = await makeAuction();
     const bidderIds = await Promise.all(Array.from({ length: 10 }, () => insertBidderUser()));
-    const bids = bidderIds.map((bidderUserId, i) =>
-      placeBid(
-        bidderUserId,
-        { auctionId: auction.id, amountMinor: 2500 + i * 100, requestId: randomUUID() },
-        { now: () => new Date(ENDS_AT.getTime() - 1), bidIncrementMinor: 100, liveBiddingEnabled: true }
-      )
-    );
+    const bidAt = new Date(ENDS_AT.getTime() - 1_000); // strictly before ends_at
+    // Placed sequentially so acceptance is deterministic: under the minimum-bid rule, concurrent
+    // arbitrary-order placement can reject a lower bid after a higher one has raised the price.
+    const bidResults = [];
+    for (let i = 0; i < bidderIds.length; i++) {
+      bidResults.push(
+        await placeBid(
+          bidderIds[i],
+          { auctionId: auction.id, amountMinor: 2500 + i * 100, requestId: randomUUID() },
+          { now: () => bidAt, bidIncrementMinor: 100, liveBiddingEnabled: true }
+        )
+      );
+    }
+    expect(bidResults.every((r) => r.accepted), JSON.stringify(bidResults.map((r) => r.error))).toBe(true);
+    expect((await query(`SELECT count(*)::int AS c FROM bids WHERE auction_id=$1`, [auction.id])).rows[0].c).toBe(bidderIds.length);
+
+    const closeResult = await closeAuction(auction.id, { now: () => ENDS_AT });
+    expect(closeResult.status).toBe("closed_sold");
+    const max = bidResults.reduce((m, r) => (r.bid!.amount.minorUnits > m.bid!.amount.minorUnits ? r : m));
+    expect(closeResult.winningBidId).toBe(max.bid!.id);
+    expect(closeResult.winningAmountMinor).toBe(String(max.bid!.amount.minorUnits));
+    expect((await auctionRow(auction.id)).status).toBe("closed_sold");
+    expect(await countCloseOutbox(auction.id)).toBe(1);
+  });
+
+  it("boundary race: concurrent bids and one close are consistent regardless of order", async () => {
+    const auction = await makeAuction();
+    const bidderIds = await Promise.all(Array.from({ length: 10 }, () => insertBidderUser()));
     const [bidResults, closeResult] = await Promise.all([
-      Promise.all(bids),
+      Promise.all(
+        bidderIds.map((bidderUserId, i) =>
+          placeBid(
+            bidderUserId,
+            { auctionId: auction.id, amountMinor: 2500 + i * 100, requestId: randomUUID() },
+            { now: () => new Date(ENDS_AT.getTime() - 1), bidIncrementMinor: 100, liveBiddingEnabled: true }
+          )
+        )
+      ),
       closeAuction(auction.id, { now: () => ENDS_AT }),
     ]);
     const accepted = bidResults.filter((r) => r.accepted);
+    // Order-independent invariants only.
     for (const result of accepted) {
       expect(new Date(result.bid!.acceptedAt).getTime()).toBeLessThan(ENDS_AT.getTime());
     }
     expect((await query(`SELECT count(*)::int AS c FROM bids WHERE auction_id=$1`, [auction.id])).rows[0].c).toBe(accepted.length);
-
     if (accepted.length > 0) {
       const max = accepted.reduce((m, r) => (r.bid!.amount.minorUnits > m.bid!.amount.minorUnits ? r : m));
       expect(closeResult.status).toBe("closed_sold");
@@ -373,9 +402,45 @@ describe("auction close (Slice 4b)", () => {
     expect(result.failed).toBe(1);
     expect(result.errors).toEqual([{ auctionId: bad.id, message: "forced close failure" }]);
     expect((await auctionRow(good.id)).status).toBe("closed_unsold");
+    // Good auction: exactly one close row in each table.
+    expect(await countCloseEvents(good.id)).toBe(1);
+    const goodAudit = await query(`SELECT * FROM audit_logs WHERE action='auction.closed' AND target_id=$1`, [good.id]);
+    expect(goodAudit.rowCount).toBe(1);
+    expect(goodAudit.rows[0].reason).toBe("system_close");
+    expect(await countCloseOutbox(good.id)).toBe(1);
+    const goodOutbox = await query(`SELECT * FROM outbox_events WHERE aggregate_id=$1 AND event_type='auction.closed'`, [good.id]);
+    expect(goodOutbox.rowCount).toBe(1);
+    // Failing auction: zero close rows, status unchanged.
     expect((await auctionRow(bad.id)).status).toBe("scheduled");
+    expect(await countCloseEvents(bad.id)).toBe(0);
     expect(await countCloseAudit(bad.id)).toBe(0);
     expect(await countCloseOutbox(bad.id)).toBe(0);
+  });
+
+  it("closeAuction on a cancelled auction throws AUCTION_CANCELLED and writes nothing", async () => {
+    const auction = await makeAuction();
+    // No 4a cancel path exists in the service; set the terminal cancelled status directly.
+    await query(`UPDATE auctions SET status='cancelled' WHERE id=$1`, [auction.id]);
+    await expect(
+      closeAuction(auction.id, { now: () => new Date(ENDS_AT.getTime() + 60_000) })
+    ).rejects.toThrow(/AUCTION_CANCELLED/);
+    expect((await auctionRow(auction.id)).status).toBe("cancelled");
+    expect(await countCloseEvents(auction.id)).toBe(0);
+    expect(await countCloseAudit(auction.id)).toBe(0);
+    expect(await countCloseOutbox(auction.id)).toBe(0);
+  });
+
+  it("closeDueAuctions skips cancelled auctions (selects only scheduled and active)", async () => {
+    const jobNow = new Date(ENDS_AT.getTime() + 60_000);
+    const due = await makeAuction();
+    const cancelled = await makeAuction();
+    await query(`UPDATE auctions SET status='cancelled' WHERE id=$1`, [cancelled.id]);
+
+    const result = await closeDueAuctions({ now: () => jobNow });
+    expect(result).toMatchObject({ closed: 1, skipped: 0, failed: 0, errors: [] });
+    expect((await auctionRow(due.id)).status).toBe("closed_unsold");
+    expect((await auctionRow(cancelled.id)).status).toBe("cancelled");
+    expect(await countCloseOutbox(cancelled.id)).toBe(0);
   });
 });
 

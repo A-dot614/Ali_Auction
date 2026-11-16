@@ -560,6 +560,10 @@ export async function closeAuction(auctionId: string, opts?: CloseAuctionOptions
       throw new Error("NOT_FOUND: Auction not found.");
     }
     const auction = auctionRes.rows[0];
+    // Cancelled is terminal: never close a cancelled auction (stable error, writes nothing).
+    if (auction.status === "cancelled") {
+      throw new Error("AUCTION_CANCELLED: Auction is cancelled and cannot be closed.");
+    }
     const at = now();
 
     // Idempotent no-op: an already-closed auction returns its existing outcome and writes nothing.
