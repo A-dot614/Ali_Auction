@@ -6,9 +6,10 @@ import cors from "cors";
 import express from "express";
 import { createHandler } from "graphql-http/lib/use/express";
 import { schema } from "./graphql/schema.js";
-import { assertSafeFeatureFlags, config } from "./config.js";
+import { assertMoneyFlagsOffForProduction, assertSafeFeatureFlags, config } from "./config.js";
 import { buildAuthContext } from "./graphql/resolvers/identity.js";
 import { authRateLimiter, strictAuthRateLimiter } from "./middleware/rateLimit.js";
+import { handleWebhook } from "./payments/service.js";
 
 // Load env from app-local or monorepo root (pnpm runs scripts from package dirs).
 for (const p of [".env", "../../.env"]) {
@@ -18,6 +19,7 @@ for (const p of [".env", "../../.env"]) {
 
 // Safety: never allow live bidding or real-money flows to be enabled by default/config in this phase.
 assertSafeFeatureFlags();
+assertMoneyFlagsOffForProduction();
 
 export function createApp() {
   const app = express();
@@ -30,6 +32,21 @@ export function createApp() {
     })
   );
   app.use(cookieParser());
+
+  // Sandbox payment webhook: raw body must be preserved for signature verification.
+  // Mounted before express.json(); redirects never change payment state.
+  app.post("/webhooks/payments/fake", express.raw({ type: "*/*" }), async (req, res) => {
+    try {
+      const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "";
+      const result = await handleWebhook("fake", raw, req.headers as Record<string, unknown>);
+      res.json(result);
+    } catch (err: any) {
+      const code = String(err?.message || "INTERNAL_ERROR").split(":")[0];
+      const status = code === "INVALID_SIGNATURE" ? 401 : code === "REAL_MONEY_DISABLED" ? 403 : 400;
+      res.status(status).json({ error: { code, message: err?.message || code } });
+    }
+  });
+
   app.use(express.json());
 
   app.get("/health", (_req, res) => {

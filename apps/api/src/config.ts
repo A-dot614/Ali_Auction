@@ -47,6 +47,26 @@ export const config = {
       maxPageSize: 100,
     };
   },
+  // Payment/fulfilment placeholders (Slice 6). All NOT FOR PRODUCTION.
+  // TODO(docs/16 §4, §5, §6): provider, capture timing, fee payer/base/tax, shipping rates are OPEN.
+  get payments() {
+    return {
+      // Fake-provider sandbox secret only; tests inject their own value. NOT FOR PRODUCTION.
+      fakeWebhookSecret: env("FAKE_PAYMENT_WEBHOOK_SECRET", "fake-webhook-secret-placeholder-not-for-production"),
+    };
+  },
+  get fees() {
+    return {
+      // Fallback placeholder; authoritative fee is snapshotted from fee_rules (docs/16 §4).
+      buyerFeeBps: Number(env("BUYER_FEE_BPS", "800")),
+    };
+  },
+  get fulfilment() {
+    return {
+      // No shipping rate decision exists yet; shipping fee stays 0 (docs/16 §6).
+      shippingFeeMinor: Number(env("SHIPPING_FEE_MINOR", "0")),
+    };
+  },
 };
 
 export function assertSafeFeatureFlags() {
@@ -58,6 +78,19 @@ export function assertSafeFeatureFlags() {
   if (config.features.realMoneyPaymentsEnabled) {
     throw new Error(
       "FEATURE_REAL_MONEY_PAYMENTS_ENABLED must remain false: real-money/escrow/payout flows not permitted."
+    );
+  }
+}
+
+/**
+ * Slice 6 (D1): startup guard for money-moving features. Production startup must never see
+ * FEATURE_REAL_MONEY_PAYMENTS_ENABLED enabled. Kept separate from assertSafeFeatureFlags so
+ * tests can assert the money flag explicitly (docs/16 §5).
+ */
+export function assertMoneyFlagsOffForProduction() {
+  if (config.nodeEnv === "production" && config.features.realMoneyPaymentsEnabled) {
+    throw new Error(
+      "FEATURE_REAL_MONEY_PAYMENTS_ENABLED must remain false in production: sandbox only."
     );
   }
 }

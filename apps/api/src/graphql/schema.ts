@@ -13,6 +13,7 @@ import {
 import { identityResolvers } from "./resolvers/identity.js";
 import { sellerResolvers } from "./resolvers/seller.js";
 import { catalogueResolvers } from "./resolvers/catalogue.js";
+import { ordersResolvers } from "./resolvers/orders.js";
 import { auctionResolvers } from "./resolvers/auction.js";
 
 const HealthType = new GraphQLObjectType({
@@ -259,6 +260,89 @@ const SearchResultType = new GraphQLObjectType({
   },
 });
 
+const OrderStatusEnum = new GraphQLEnumType({
+  name: "OrderStatus",
+  values: {
+    awaiting_payment: { value: "awaiting_payment" },
+    paid: { value: "paid" },
+    processing: { value: "processing" },
+    shipped: { value: "shipped" },
+    ready_for_pickup: { value: "ready_for_pickup" },
+    completed: { value: "completed" },
+    cancelled: { value: "cancelled" },
+  },
+});
+
+const PaymentStatusEnum = new GraphQLEnumType({
+  name: "PaymentStatus",
+  values: {
+    created: { value: "created" },
+    captured: { value: "captured" },
+    failed: { value: "failed" },
+    refunded_partial: { value: "refunded_partial" },
+    refunded: { value: "refunded" },
+  },
+});
+
+const FulfilmentActionEnum = new GraphQLEnumType({
+  name: "FulfilmentAction",
+  values: {
+    start_processing: { value: "start_processing" },
+    mark_shipped: { value: "mark_shipped" },
+    ready_for_pickup: { value: "ready_for_pickup" },
+    complete: { value: "complete" },
+  },
+});
+
+const ShipmentType = new GraphQLObjectType({
+  name: "Shipment",
+  fields: {
+    method: { type: new GraphQLNonNull(GraphQLString) },
+    carrier: { type: GraphQLString },
+    trackingNumber: { type: GraphQLString },
+  },
+});
+
+// Participant-only order type: no provider IDs, webhook payloads, staff notes or other-party user IDs.
+const OrderType = new GraphQLObjectType({
+  name: "Order",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(OrderStatusEnum) },
+    currency: { type: new GraphQLNonNull(GraphQLString) },
+    hammerPriceMinor: { type: new GraphQLNonNull(GraphQLString) },
+    feeTotalMinor: { type: new GraphQLNonNull(GraphQLString) },
+    totalMinor: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+    shippingAddressSnapshot: { type: GraphQLString },
+    shipments: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(ShipmentType))) },
+  },
+});
+
+const OrderConnection = new GraphQLObjectType({
+  name: "OrderConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(OrderType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+const PaymentType = new GraphQLObjectType({
+  name: "PaymentTransaction",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(PaymentStatusEnum) },
+    amountMinor: { type: new GraphQLNonNull(GraphQLString) },
+    capturedAmountMinor: { type: new GraphQLNonNull(GraphQLString) },
+    refundedAmountMinor: { type: new GraphQLNonNull(GraphQLString) },
+    currency: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
 const AuctionStatusEnum = new GraphQLEnumType({
   name: "AuctionStatus",
   values: {
@@ -470,6 +554,35 @@ const CategoryListingsInput = new GraphQLInputObjectType({
   },
 });
 
+const CheckoutInput = new GraphQLInputObjectType({
+  name: "CheckoutInput",
+  fields: {
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    acceptedTotalMinor: { type: new GraphQLNonNull(GraphQLString) },
+    fulfilmentChoice: { type: new GraphQLNonNull(GraphQLString) },
+    requestId: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const FulfilmentInput = new GraphQLInputObjectType({
+  name: "FulfilmentInput",
+  fields: {
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    action: { type: new GraphQLNonNull(FulfilmentActionEnum) },
+    carrier: { type: GraphQLString },
+    trackingNumber: { type: GraphQLString },
+  },
+});
+
+const RefundInput = new GraphQLInputObjectType({
+  name: "RefundInput",
+  fields: {
+    paymentId: { type: new GraphQLNonNull(GraphQLID) },
+    amountMinor: { type: new GraphQLNonNull(GraphQLString) },
+    reason: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
 const ListingDraftInput = new GraphQLInputObjectType({
   name: "ListingDraftInput",
   fields: {
@@ -546,6 +659,26 @@ const QueryType = new GraphQLObjectType({
         input: { type: CategoryListingsInput },
       },
       resolve: catalogueResolvers.Query.categoryListings,
+    },
+    myOrders: {
+      type: new GraphQLNonNull(OrderConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: ordersResolvers.Query.myOrders,
+    },
+    order: {
+      type: new GraphQLNonNull(OrderType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: ordersResolvers.Query.order,
+    },
+    sellerOrders: {
+      type: new GraphQLNonNull(OrderConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: ordersResolvers.Query.sellerOrders,
+    },
+    ordersAll: {
+      type: new GraphQLNonNull(OrderConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: ordersResolvers.Query.ordersAll,
     },
     pendingListingReviews: {
       type: new GraphQLNonNull(ListingConnection),
@@ -693,6 +826,21 @@ const MutationType = new GraphQLObjectType({
       type: GraphQLBoolean,
       args: { input: { type: new GraphQLNonNull(SetProxyBidInput) } },
       resolve: auctionResolvers.Mutation.setProxyBid,
+    },
+    createCheckout: {
+      type: new GraphQLNonNull(PaymentType),
+      args: { input: { type: new GraphQLNonNull(CheckoutInput) } },
+      resolve: ordersResolvers.Mutation.createCheckout,
+    },
+    recordFulfilment: {
+      type: new GraphQLNonNull(OrderType),
+      args: { input: { type: new GraphQLNonNull(FulfilmentInput) } },
+      resolve: ordersResolvers.Mutation.recordFulfilment,
+    },
+    refundPayment: {
+      type: new GraphQLNonNull(PaymentType),
+      args: { input: { type: new GraphQLNonNull(RefundInput) } },
+      resolve: ordersResolvers.Mutation.refundPayment,
     },
   },
 });
