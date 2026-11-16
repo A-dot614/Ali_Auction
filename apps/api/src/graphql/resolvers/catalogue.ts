@@ -1,13 +1,28 @@
 import { requireAuth, requireVerified, type GraphQLContext } from "../../auth/authz.js";
 import {
+  approveListing,
   createListingDraft,
   getPublicListingBySlug,
   listActiveCategories,
   myListings,
+  pendingListingReviews,
+  rejectListing,
+  resumeListing,
+  removeListing,
+  pauseListing,
   submitListingForReview,
   updateListingDraft,
   type Listing,
 } from "../../catalogue/service.js";
+
+function requireStaffReviewer(ctx: GraphQLContext) {
+  const user = requireAuth(ctx);
+  // Moderation (listing actions) is staff-only: Moderator/Trust & Safety or admin (docs/09).
+  if (user.roles.includes("admin") || user.roles.includes("moderator")) {
+    return user;
+  }
+  throw new Error("FORBIDDEN: Insufficient permissions.");
+}
 
 function toIso(d: Date | null | undefined): string | null {
   return d ? d.toISOString() : null;
@@ -63,6 +78,12 @@ export const catalogueResolvers = {
         media: media.map((m) => ({ altText: m.altText, sortOrder: m.sortOrder })),
       };
     },
+    pendingListingReviews: async (_: any, args: any, ctx: GraphQLContext) => {
+      requireStaffReviewer(ctx);
+      const result = await pendingListingReviews({ first: args.first, after: args.after ?? null });
+      // Minimal cursor: createdAt of last item.
+      return { ...result, items: result.items.map(serializeListing) };
+    },
   },
   Mutation: {
     createListingDraft: async (_: any, { input }: any, ctx: GraphQLContext) => {
@@ -76,6 +97,26 @@ export const catalogueResolvers = {
     submitListingForReview: async (_: any, { id }: any, ctx: GraphQLContext) => {
       const user = requireVerified(ctx);
       return serializeListing(await submitListingForReview(user.id, id));
+    },
+    approveListing: async (_: any, { id }: any, ctx: GraphQLContext) => {
+      const reviewer = requireStaffReviewer(ctx);
+      return serializeListing(await approveListing(id, reviewer.id));
+    },
+    rejectListing: async (_: any, { id, reason }: any, ctx: GraphQLContext) => {
+      const reviewer = requireStaffReviewer(ctx);
+      return serializeListing(await rejectListing(id, reviewer.id, reason));
+    },
+    pauseListing: async (_: any, { id, reason }: any, ctx: GraphQLContext) => {
+      const reviewer = requireStaffReviewer(ctx);
+      return serializeListing(await pauseListing(id, reviewer.id, reason));
+    },
+    resumeListing: async (_: any, { id }: any, ctx: GraphQLContext) => {
+      const reviewer = requireStaffReviewer(ctx);
+      return serializeListing(await resumeListing(id, reviewer.id));
+    },
+    removeListing: async (_: any, { id, reason }: any, ctx: GraphQLContext) => {
+      const reviewer = requireStaffReviewer(ctx);
+      return serializeListing(await removeListing(id, reviewer.id, reason));
     },
   },
 };

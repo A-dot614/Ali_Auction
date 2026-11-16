@@ -405,3 +405,263 @@ export async function getPublicListingBySlug(slug: string): Promise<{
   const media = mediaRes.rows.map((m: any) => ({ altText: m.alt_text, sortOrder: m.sort_order }));
   return { listing, category, media };
 }
+
+type LockedListing = { listing: any; sellerUserId: string | null };
+
+async function lockListingForModeration(client: pg.PoolClient, listingId: string): Promise<LockedListing> {
+  const res = await client.query(`SELECT * FROM listings WHERE id = $1 FOR UPDATE`, [listingId]);
+  if ((res.rowCount ?? 0) === 0) {
+    throw new Error("NOT_FOUND: Listing not found.");
+  }
+  const listing = res.rows[0];
+  let sellerUserId: string | null = null;
+  if (listing.seller_profile_id) {
+    const spRes = await client.query(`SELECT user_id FROM seller_profiles WHERE id = $1`, [listing.seller_profile_id]);
+    if ((spRes.rowCount ?? 0) > 0) {
+      sellerUserId = (spRes.rows[0].user_id as string) ?? null;
+    }
+  }
+  return { listing, sellerUserId };
+}
+
+export async function pendingListingReviews(opts: {
+  first?: number;
+  after?: string | null;
+}): Promise<{ items: Listing[]; endCursor: string | null }> {
+  const limit = Math.min(Math.max(opts.first || 20, 1), 100);
+  const params: any[] = [];
+  let where = `WHERE l.status = 'pending_review'`;
+  if (opts.after) {
+    params.push(opts.after);
+    where += ` AND l.created_at < $${params.length}`;
+  }
+  const res = await query(
+    `SELECT l.*, c.id as c_id, c.parent_id as c_parent_id, c.name as c_name, c.slug as c_slug,
+            c.is_active as c_is_active, c.sort_order as c_sort_order, c.is_placeholder as c_is_placeholder
+     FROM listings l
+     JOIN categories c ON c.id = l.category_id
+     ${where}
+     ORDER BY l.created_at DESC
+     LIMIT ${limit}`,
+    params
+  );
+  const items = res.rows.map((r: any) => mapListing(r));
+  const endCursor = items.length ? items[items.length - 1].createdAt.toISOString() : null;
+  return { items, endCursor };
+}
+
+export async function approveListing(listingId: string, reviewerUserId: string): Promise<Listing> {
+  return withTransaction(async (client) => {
+    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+    if (sellerUserId === reviewerUserId) {
+      throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
+    }
+    const status = listing.status as ListingStatus;
+    try {
+      assertTransition(status, "published");
+    } catch (err) {
+      await recordAudit(
+        {
+          actorUserId: reviewerUserId,
+          action: "listing.transition_rejected",
+          targetType: "listing",
+          targetId: listingId,
+          metadata: { before: status, after: "published", attemptedAction: "approveListing" },
+        },
+        client
+      );
+      throw err;
+    }
+    const updated = await client.query(
+      `UPDATE listings SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING *`,
+      [listingId]
+    );
+    await recordAudit(
+      {
+        actorUserId: reviewerUserId,
+        action: "listing.approved",
+        targetType: "listing",
+        targetId: listingId,
+        reason: null,
+        metadata: { before: status, after: "published", listingId },
+      },
+      client
+    );
+    return mapListing(updated.rows[0]);
+  });
+}
+
+export async function rejectListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+  const trimmedReason = (reason || "").trim();
+  if (!trimmedReason) {
+    throw new Error("VALIDATION_ERROR: Reason is required for reject.");
+  }
+  return withTransaction(async (client) => {
+    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+    if (sellerUserId === reviewerUserId) {
+      throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
+    }
+    const status = listing.status as ListingStatus;
+    try {
+      assertTransition(status, "rejected");
+    } catch (err) {
+      await recordAudit(
+        {
+          actorUserId: reviewerUserId,
+          action: "listing.transition_rejected",
+          targetType: "listing",
+          targetId: listingId,
+          metadata: { before: status, after: "rejected", attemptedAction: "rejectListing" },
+        },
+        client
+      );
+      throw err;
+    }
+    const updated = await client.query(
+      `UPDATE listings SET status='rejected', rejection_reason=$2, published_at=NULL, updated_at=now() WHERE id=$1 RETURNING *`,
+      [listingId, trimmedReason]
+    );
+    await recordAudit(
+      {
+        actorUserId: reviewerUserId,
+        action: "listing.rejected",
+        targetType: "listing",
+        targetId: listingId,
+        reason: trimmedReason,
+        metadata: { before: status, after: "rejected", listingId },
+      },
+      client
+    );
+    return mapListing(updated.rows[0]);
+  });
+}
+
+export async function pauseListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+  const trimmedReason = (reason || "").trim();
+  if (!trimmedReason) {
+    throw new Error("VALIDATION_ERROR: Reason is required for pause.");
+  }
+  return withTransaction(async (client) => {
+    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+    if (sellerUserId === reviewerUserId) {
+      throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
+    }
+    const status = listing.status as ListingStatus;
+    try {
+      assertTransition(status, "paused");
+    } catch (err) {
+      await recordAudit(
+        {
+          actorUserId: reviewerUserId,
+          action: "listing.transition_rejected",
+          targetType: "listing",
+          targetId: listingId,
+          metadata: { before: status, after: "paused", attemptedAction: "pauseListing" },
+        },
+        client
+      );
+      throw err;
+    }
+    const updated = await client.query(
+      `UPDATE listings SET status='paused', updated_at=now() WHERE id=$1 RETURNING *`,
+      [listingId]
+    );
+    await recordAudit(
+      {
+        actorUserId: reviewerUserId,
+        action: "listing.paused",
+        targetType: "listing",
+        targetId: listingId,
+        reason: trimmedReason,
+        metadata: { before: status, after: "paused", listingId },
+      },
+      client
+    );
+    return mapListing(updated.rows[0]);
+  });
+}
+
+export async function resumeListing(listingId: string, reviewerUserId: string): Promise<Listing> {
+  return withTransaction(async (client) => {
+    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+    if (sellerUserId === reviewerUserId) {
+      throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
+    }
+    const status = listing.status as ListingStatus;
+    try {
+      assertTransition(status, "published");
+    } catch (err) {
+      await recordAudit(
+        {
+          actorUserId: reviewerUserId,
+          action: "listing.transition_rejected",
+          targetType: "listing",
+          targetId: listingId,
+          metadata: { before: status, after: "published", attemptedAction: "resumeListing" },
+        },
+        client
+      );
+      throw err;
+    }
+    const updated = await client.query(
+      `UPDATE listings SET status='published', published_at=now(), updated_at=now() WHERE id=$1 RETURNING *`,
+      [listingId]
+    );
+    await recordAudit(
+      {
+        actorUserId: reviewerUserId,
+        action: "listing.resumed",
+        targetType: "listing",
+        targetId: listingId,
+        metadata: { before: status, after: "published", listingId },
+      },
+      client
+    );
+    return mapListing(updated.rows[0]);
+  });
+}
+
+export async function removeListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+  const trimmedReason = (reason || "").trim();
+  if (!trimmedReason) {
+    throw new Error("VALIDATION_ERROR: Reason is required for remove.");
+  }
+  return withTransaction(async (client) => {
+    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+    if (sellerUserId === reviewerUserId) {
+      throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
+    }
+    const status = listing.status as ListingStatus;
+    try {
+      assertTransition(status, "removed");
+    } catch (err) {
+      await recordAudit(
+        {
+          actorUserId: reviewerUserId,
+          action: "listing.transition_rejected",
+          targetType: "listing",
+          targetId: listingId,
+          metadata: { before: status, after: "removed", attemptedAction: "removeListing" },
+        },
+        client
+      );
+      throw err;
+    }
+    const updated = await client.query(
+      `UPDATE listings SET status='removed', updated_at=now() WHERE id=$1 RETURNING *`,
+      [listingId]
+    );
+    await recordAudit(
+      {
+        actorUserId: reviewerUserId,
+        action: "listing.removed",
+        targetType: "listing",
+        targetId: listingId,
+        reason: trimmedReason,
+        metadata: { before: status, after: "removed", listingId },
+      },
+      client
+    );
+    return mapListing(updated.rows[0]);
+  });
+}

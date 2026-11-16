@@ -2,7 +2,7 @@
 
 **Roadmap source:** `docs/15-delivery-roadmap.md`  
 **Scope basis:** `docs/01-product-requirements-document.md`, `docs/02-epics-user-stories.md`  
-**Last updated:** 2026-11-15 (Slice 3a catalogue/listings partial completed; stopped before Slice 3b moderation/public completion)
+**Last updated:** 2026-11-16 (Slice 3a completed; Slice 3b listing moderation + public visibility completed; stopped before Slice 4)
 
 ## Phase 1 workstreams
 
@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | Identity and account management | In progress | Implemented: registration, login, logout, email verification, password reset (provider-agnostic email interface with dev console provider), bcrypt password hashing, DB-backed session tokens in HttpOnly/SameSite cookies with rotation and revocation on logout/reset, roles baseline (`buyer`,`seller`,`admin`), server-side GraphQL authz checks, audit logging helper + sensitive auth events, auth rate limiting, unit/integration/authz tests. Not yet: MFA (FR-008/P1, policy/open decisions), profile management UI/API, full account lifecycle, email delivery provider integration, production-grade session hardening/CSRF posture review for final deployment. |
 | 2 | Seller profile and basic verification workflow | Not started | Identity roles seeded (`seller`), but seller profile/verification entities and workflows not migrated/implemented. Verification requirements/policies are open decisions. |
-| 3 | Categories and listing management | In progress (Slice 3a partial) | Slice 3a implemented: placeholder categories (seeded `is_placeholder=true`, "PLACEHOLDER - NOT APPROVED"), listing drafts/create/update/submit, `myListings`, public `listing(slug)` (published-only, public-safe fields), listing state machine module, migration/tests/docs. **No auctions/bids/scheduling enforcement** (requested times draft-only/non-binding); moderation actions/UI completion and some public behaviors deferred to **Slice 3b**. |
+| 3 | Categories and listing management | In progress (Slice 3a completed; Slice 3b moderation/public visibility completed for requested scope; auction scope pending) | Slice 3a implemented: placeholder categories (seeded `is_placeholder=true`, "PLACEHOLDER - NOT APPROVED"), listing drafts/create/update/submit, `myListings`, public `listing(slug)` (published-only, public-safe fields), listing state machine module, migration/tests/docs. Slice 3b added staff-only moderation mutations (approve/reject/pause/resume/remove) with `SELECT ... FOR UPDATE` concurrency control, audit logging decision (`listing.*` + `listing.transition_rejected`), self-moderation forbidden, and public visibility for all statuses. **No auctions/bids/scheduling enforcement** (requested times draft-only/non-binding). Moderation policy/UI/SLAs (docs/16 §8 #3, §8 #6, §7 #5, §7 #6) and seller notifications (Slice 8) remain open. |
 | 4 | Timed auction engine | Not started (blocked) | **No live bidding enabled.** Feature flag `FEATURE_LIVE_BIDDING_ENABLED` defaults to `false` and is enforced off at API startup. Auction rules/increments/close behavior require approved decisions. |
 | 5 | Manual bidding and approved proxy-bidding baseline | Not started (blocked) | **No live bidding enabled.** Depends on approved bidding/proxy/tie/extension rules (`docs/07`, `docs/16`). |
 | 6 | Search and browsing | Not started | No search/browse implementation; Postgres vs Elasticsearch for MVP is an open decision. |
@@ -281,7 +281,7 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 **Open decisions / TODOs (Slice 3a relevant, docs/16):**
 - **§8 #1** Approved categories and attributes/taxonomy: **OPEN**. Seeded categories are **PLACEHOLDER - NOT APPROVED** (`is_placeholder=true`); replace via reviewed migration/config when approved.
 - **§8 #6** UI/wireframes for listings/catalogue: **OPEN** (no UI implemented).
-- **§8 #3** Moderation manual/automated/hybrid: **OPEN**. Moderator approve/reject/pause/remove GraphQL actions and public completion deferred to **Slice 3b** (state model supports transitions).
+- **§8 #3** Moderation manual/automated/hybrid: **OPEN**. Slice 3b implemented **manual staff moderation** actions via staff-reviewed GraphQL mutations; automated/hybrid policy, thresholds, queue and SLA decisions remain open (`docs/16` §8 #2 decision pending, §8 #5 SLA).
 - **§7 #5** Prohibited/restricted items policy: **OPEN** (needed for moderation/review reasons and listing controls).
 - **§3 #1** Auction format/rules: **OPEN** — affects requested schedule semantics/enforcement (Slice 4).
 - **§3 #2** Bid input semantics (next bid vs maximum/proxy): **OPEN** — affects future bidding UX/validation (not in 3a).
@@ -290,4 +290,41 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 - **Slug uniqueness scope:** implemented as globally unique (documented); revisit if per-seller policy approved.
 - Requested start/end remain draft-only/non-binding in 3a; no future-start validation (Slice 4 server-time logic).
 
-**Workstream status:** #3 Categories and listing management — **In progress (Slice 3a partial complete; Slice 3b moderation/public completion not started)**. No auctions/bids/scheduling enforcement implemented. Live bidding and real-money payments remain **OFF** by enforced defaults.
+## Slice 3b — Listing moderation, audit, public visibility (workstream 3, partial)
+
+**Migration:** No new migration in Slice 3b — `listings.status` enum / `rejection_reason` / `published_at` already introduced in `apps/api/migrations/1700000000400_catalogue_listings_slice3a.js`. No DB changes.
+
+**Service/operations & GraphQL:** `apps/api/src/catalogue/service.ts`, `apps/api/src/graphql/resolvers/catalogue.ts`, schema/types in `apps/api/src/graphql/schema.ts`
+- `pendingListingReviews(first, after)`: staff-only (`admin|moderator`, docs/09 moderation concept) cursor-paginated queue over `listings WHERE status='pending_review'`, ordered by `created_at DESC`, minimal cursor (`created_at` ISO of last item), LIMIT clamped 1–100.
+- `approveListing(id)`: staff-only; transitions `pending_review → published` via state machine `assertTransition` inside `withTransaction`; sets `published_at=now()` (server UTC) on success; audit `listing.approved` (actor/action/target/before/after; reason null). Invalid transition (e.g. already published) → `INVALID_LISTING_TRANSITION`, audit `listing.transition_rejected` (proposed decision — recorded as such, not settled policy) with attempted action metadata.
+- `rejectListing(id, reason)`: staff-only; requires non-empty trimmed reason (`VALIDATION_ERROR` if empty/whitespace); `pending_review → rejected`, sets `rejection_reason`; audit `listing.rejected` with reason; invalid transition audited as `listing.transition_rejected`.
+- `pauseListing(id, reason)`: staff-only; requires non-empty trimmed reason; `published → paused`; audit `listing.paused` with reason.
+- `resumeListing(id)`: staff-only; `paused → published`; audit `listing.resumed`; sets `published_at=now()`.
+- `removeListing(id, reason)`: staff-only; requires non-empty trimmed reason; `published|paused → removed` (terminal); audit `listing.removed` with reason.
+- All moderation transactions: `SELECT … FOR UPDATE` on listing row, read current status, validate via `listingStateMachine.assertTransition`, update, single audit write. Concurrent approves serialize on the row lock → exactly one success / one `INVALID_LISTING_TRANSITION`.
+- Self-moderation forbidden: moderator cannot act on a listing owned by their own seller profile → `FORBIDDEN` (checked in resolver + service).
+- Reviewer identity appears only in `audit_logs` (actor_user_id), never in seller-facing/public responses.
+- Seller notification on reject/pause/remove: **TODO for Slice 8** (no inline email; `src/email` remains dev-console/provider-agnostic TODO).
+
+**Public visibility:** `listing(slug)` returns **published only** (all other statuses incl. draft/pending_review/rejected/paused/removed → same `NOT_FOUND`); public-safe fields only (title, description, category incl. placeholder flag, condition, fulfilment_option, currency, starting_price_minor, published_at, media alt_text/sort only); no storage_key/rejection_reason/moderation fields/legal_name/verification status/internal IDs beyond allowed public fields; `ListingPublic` schema test asserts no private field names.
+
+**Audit decision (recorded, not settled policy):** successful moderation writes exactly one `audit_logs` row (actor, action, target_type `listing`, target_id, before_status, after_status, reason). FORBIDDEN attempts write **no** audit row. Invalid transitions write **one** row with action `listing.transition_rejected` carrying the attempted action — recorded as a **proposed decision** pending moderation policy approval (`docs/16` §8 #2 decision pending).
+
+**Tests (API, Vitest):**
+- `apps/api/test/listing-state.test.ts` (Slice 3a) + `apps/api/test/integration-listing.test.ts` — Slice 3b integration cases under `catalogue/listings (Slice 3b) — moderation`: moderator approves pending_review listing; one audit row written; reject without reason → VALIDATION_ERROR; reject with whitespace-only reason → VALIDATION_ERROR; pause requires reason; resume returns to published; remove works from published and from paused; seller cannot call any moderation mutation (FORBIDDEN); buyer cannot call any moderation mutation (FORBIDDEN); moderator cannot moderate own seller listing (FORBIDDEN); concurrent approve of same listing: one success, one INVALID_LISTING_TRANSITION; approve already published listing → INVALID_LISTING_TRANSITION, no duplicate audit row; listing(slug) returns NOT_FOUND for draft/pending_review/rejected/paused/removed; returns data for published; ListingPublic schema contains no private fields; pendingListingReviews is staff-only; two pages have no duplicate IDs; every moderation resolver writes an audit row on success (all resolvers enumerated).
+
+**Verification (local, 2026-11-16):**
+- `npx -y pnpm@9.15.4 lint` — **OK**
+- `npx -y pnpm@9.15.4 -r typecheck` — **OK**
+- `npx -y pnpm@9.15.4 -r test` — **OK** (Scope 3 of 4 workspace projects; API: 7 files, 41 tests passed incl. Slice 3a/3b listing suites; shared/web pass)
+- `npx -y pnpm@9.15.4 -r build` — **OK** (logged to `logs/full-build-slice3b.log`; api/shared/web completed)
+- `bash scripts/test-migrations-roundtrip.sh` — **OK** (incl. listing migration up/down/up; no new migration)
+
+**Open decisions / TODOs (Slice 3b relevant, docs/16):**
+- **§8 #3** Moderation manual/automated/hybrid: **OPEN** — Slice 3b implemented **manual staff moderation** actions only (via staff-reviewed GraphQL mutations); automated/hybrid policy, thresholds, queue and SLA decisions remain open (docs/16 §8 #2 decision pending, §8 #5 SLA).
+- **§7 #5** Prohibited/restricted items policy: **OPEN** — reject reasons/approvals must align with approved list later (not invented in 3b).
+- **§8 #6** Moderation UI: **OPEN** — no UI implemented (listings UI remains docs/16 §8 #6).
+- **§7 #6** Rejection appeal path: **OPEN** — rejected→draft owner revision implemented; formal appeal workflow remains future slice (`docs/16` §7 #6).
+- **Slice 8** Seller notifications on reject/pause/remove: **TODO** (no inline email implemented in 3b).
+
+**Workstream status:** #3 Categories and listing management — **In progress (Slice 3a + Slice 3b completed for requested scope; Slice 4 auction engine blocked/not started)**. No auctions/bids/scheduling enforcement implemented. Live bidding and real-money payments remain **OFF** by enforced defaults.

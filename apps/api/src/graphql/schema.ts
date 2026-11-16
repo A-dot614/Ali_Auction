@@ -374,6 +374,11 @@ const QueryType = new GraphQLObjectType({
       args: { slug: { type: new GraphQLNonNull(GraphQLString) } },
       resolve: catalogueResolvers.Query.listing,
     },
+    pendingListingReviews: {
+      type: new GraphQLNonNull(ListingConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: catalogueResolvers.Query.pendingListingReviews,
+    },
   },
 });
 
@@ -465,6 +470,31 @@ const MutationType = new GraphQLObjectType({
       type: new GraphQLNonNull(ListingType),
       args: { id: { type: new GraphQLNonNull(GraphQLID) } },
       resolve: catalogueResolvers.Mutation.submitListingForReview,
+    },
+    approveListing: {
+      type: new GraphQLNonNull(ListingType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: catalogueResolvers.Mutation.approveListing,
+    },
+    rejectListing: {
+      type: new GraphQLNonNull(ListingType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) }, reason: { type: GraphQLString } },
+      resolve: catalogueResolvers.Mutation.rejectListing,
+    },
+    pauseListing: {
+      type: new GraphQLNonNull(ListingType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) }, reason: { type: GraphQLString } },
+      resolve: catalogueResolvers.Mutation.pauseListing,
+    },
+    resumeListing: {
+      type: new GraphQLNonNull(ListingType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: catalogueResolvers.Mutation.resumeListing,
+    },
+    removeListing: {
+      type: new GraphQLNonNull(ListingType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) }, reason: { type: GraphQLString } },
+      resolve: catalogueResolvers.Mutation.removeListing,
     },
   },
 });
