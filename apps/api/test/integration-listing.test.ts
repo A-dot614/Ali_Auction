@@ -472,8 +472,22 @@ describe("catalogue/listings (Slice 3b) — moderation", () => {
     expect(forbiddenQ.body.errors?.[0]?.message || "").toContain("FORBIDDEN");
   });
 
-  it("every moderation resolver writes an audit row on success (enumerate the resolvers in the test, do not sample)", async () => {
+  it("every listing mutation writes an audit row on success (enumerated)", async () => {
     const cases: Array<{ name: string; action: string; run: () => Promise<any> }> = [
+      { name: "submitListingForReview", action: "listing.submitted_for_review", run: async () => {
+        const seller = await makeApprovedSeller(`sub-${Date.now()}-${Math.random()}@example.com`);
+        const categoryId = await getPlaceholderCategoryId();
+        const created = await gql({
+          query: `mutation($input: ListingDraftInput!){ createListingDraft(input:$input){ id } }`,
+          variables: { input: baseListingInput(categoryId) },
+          cookie: seller.cookie,
+        });
+        const listingId = created.body.data.createListingDraft.id;
+        const res = await gql({ query: `mutation($id:ID!){ submitListingForReview(id:$id){ id status } }`, variables: { id: listingId }, cookie: seller.cookie });
+        expect(res.body.errors).toBeUndefined();
+        expect(res.body.data.submitListingForReview.status).toBe("pending_review");
+        return listingId;
+      } },
       { name: "approveListing", action: "listing.approved", run: async () => {
         const setup = await setupPendingListing(`ea-${Date.now()}-${Math.random()}@example.com`);
         const res = await gql({ query: `mutation($id:ID!){ approveListing(id:$id){ id status } }`, variables: { id: setup.listingId }, cookie: setup.staff.cookie });
