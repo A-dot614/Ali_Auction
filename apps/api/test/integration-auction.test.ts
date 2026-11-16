@@ -151,6 +151,19 @@ async function countAuctionEvents(auctionId: string): Promise<number> {
   return res.rows[0].c;
 }
 
+async function countAuctionsForListing(listingId: string): Promise<number> {
+  const res = await query(`SELECT count(*)::int as c FROM auctions WHERE listing_id=$1`, [listingId]);
+  return res.rows[0].c;
+}
+
+async function countAuctionCreatedAudit(listingId: string): Promise<number> {
+  const res = await query(
+    `SELECT count(*)::int as c FROM audit_logs WHERE action='auction.created' AND metadata->>'listingId'=$1`,
+    [listingId]
+  );
+  return res.rows[0].c;
+}
+
 describe("auction create (Slice 4a)", () => {
   beforeAll(async () => {
     await query("SELECT 1");
@@ -247,6 +260,50 @@ describe("auction create (Slice 4a)", () => {
     expect(res.body.errors?.[0]?.message || "").toContain("VALIDATION_ERROR");
   });
 
+  it.each([0, -100, 12.5])(
+    "createAuction(service) rejects startingPriceMinor %s with VALIDATION_ERROR and writes no auction or audit row",
+    async (startingPriceMinor) => {
+      const { seller, listingId } = await makeSellerWithPublishedListing(
+        `auc-svc-price-${Date.now()}-${String(startingPriceMinor).replace(".", "_")}@example.com`
+      );
+      await expect(
+        createAuction(
+          seller.userId,
+          {
+            listingId,
+            startsAt: new Date(FIXED_NOW.getTime() + 86_400_000),
+            endsAt: new Date(FIXED_NOW.getTime() + 86_400_000 * 8),
+            startingPriceMinor,
+          },
+          { now: () => FIXED_NOW }
+        )
+      ).rejects.toThrow(/VALIDATION_ERROR/);
+      expect(await countAuctionsForListing(listingId)).toBe(0);
+      expect(await countAuctionCreatedAudit(listingId)).toBe(0);
+    }
+  );
+
+  it("createAuction GraphQL rejects a non-integer startingPriceMinor before the service and writes nothing", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-gql-price-${Date.now()}@example.com`);
+    const res = await gql({
+      query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
+      variables: {
+        input: {
+          listingId,
+          startsAt: new Date(FIXED_NOW.getTime() + 86_400_000).toISOString(),
+          endsAt: new Date(FIXED_NOW.getTime() + 86_400_000 * 8).toISOString(),
+          startingPriceMinor: 12.5,
+        },
+      },
+      cookie: seller.cookie,
+    });
+    expect(res.body.errors).toBeDefined();
+    expect(res.body.errors?.[0]?.message || "").toMatch(/Int|integer/i);
+    expect(res.body.data?.createAuction ?? null).toBeNull();
+    expect(await countAuctionsForListing(listingId)).toBe(0);
+    expect(await countAuctionCreatedAudit(listingId)).toBe(0);
+  });
+
   it("createAuction rejects endsAt <= startsAt (VALIDATION_ERROR)", async () => {
     const { seller, listingId } = await makeSellerWithPublishedListing(`auc-bad-window-${Date.now()}@example.com`);
     const startsAt = new Date(Date.now() + 86_400_000);
@@ -314,12 +371,54 @@ describe("placeBid (Slice 4a)", () => {
     const persisted = await query(`SELECT accepted_at FROM bids WHERE id=$1`, [atStart.bid!.id]);
     expect(new Date(persisted.rows[0].accepted_at).getTime()).toBe(startsAt.getTime());
 
+    // Every persisted timestamp from this accepted bid uses the same injected clock value.
+    const activationEvent = await query(
+      `SELECT created_at FROM auction_events WHERE auction_id=$1 AND from_status='scheduled' AND to_status='active'`,
+      [auction.id]
+    );
+    expect(new Date(activationEvent.rows[0].created_at).getTime()).toBe(startsAt.getTime());
+    const bidOutbox = await query(
+      `SELECT created_at FROM outbox_events WHERE aggregate_type='auction' AND aggregate_id=$1 AND event_type='auction.bid.accepted'`,
+      [auction.id]
+    );
+    expect(new Date(bidOutbox.rows[0].created_at).getTime()).toBe(startsAt.getTime());
+    const auctionRow = await query(`SELECT updated_at FROM auctions WHERE id=$1`, [auction.id]);
+    expect(new Date(auctionRow.rows[0].updated_at).getTime()).toBe(startsAt.getTime());
+
     const atEnd = await placeBid(await insertBidderUser(`auc-bidder3-${Date.now()}@example.com`), { auctionId: auction.id, amountMinor: 2500, requestId: "11111111-1111-4111-8111-111111111103" }, { now: () => endsAt, bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(atEnd.accepted).toBe(false);
     expect(atEnd.error?.code).toBe("AUCTION_NOT_OPEN");
 
     const beforeEnd = await placeBid(await insertBidderUser(`auc-bidder4-${Date.now()}@example.com`), { auctionId: auction.id, amountMinor: 2600, requestId: "11111111-1111-4111-8111-111111111104" }, { now: () => new Date(endsAt.getTime() - 1), bidIncrementMinor: 100, liveBiddingEnabled: true });
     expect(beforeEnd.accepted).toBe(true);
+  });
+
+  it("placeBid reads the injected clock exactly once at the ends_at boundary and persists that value", async () => {
+    const { seller, listingId } = await makeSellerWithPublishedListing(`auc-clock-once-${Date.now()}@example.com`);
+    const auction = await setupOpenAuction(seller.userId, listingId, 2500);
+    const bidderUserId = await insertBidderUser(`auc-clock-once-bidder-${Date.now()}@example.com`);
+    // First call is 1 ms before ends_at (acceptable); a second call would land exactly at ends_at (rejected).
+    const firstTick = new Date(auction.endsAt.getTime() - 1);
+    const laterTick = new Date(auction.endsAt.getTime());
+    const ticks = [firstTick, laterTick, laterTick];
+    let clockCalls = 0;
+    const now = () => {
+      const value = ticks[Math.min(clockCalls, ticks.length - 1)];
+      clockCalls += 1;
+      return value;
+    };
+
+    const res = await placeBid(
+      bidderUserId,
+      { auctionId: auction.id, amountMinor: 2500, requestId: randomUUID() },
+      { now, bidIncrementMinor: 100, liveBiddingEnabled: true }
+    );
+    expect(clockCalls).toBe(1);
+    expect(res.accepted).toBe(true);
+    const persisted = await query(`SELECT accepted_at FROM bids WHERE id=$1`, [res.bid!.id]);
+    expect(new Date(persisted.rows[0].accepted_at).getTime()).toBe(firstTick.getTime());
+    const auctionRow = await query(`SELECT updated_at FROM auctions WHERE id=$1`, [auction.id]);
+    expect(new Date(auctionRow.rows[0].updated_at).getTime()).toBe(firstTick.getTime());
   });
 
   it("bid after ends_at is rejected AUCTION_NOT_OPEN and writes no bid row", async () => {

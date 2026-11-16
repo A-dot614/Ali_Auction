@@ -206,8 +206,10 @@ export async function createAuction(
       return auction;
     });
   } catch (err: any) {
-    // The explicit check above runs under a row lock; this also covers a raw unique violation.
-    if (err?.code === "23505" && (!err.constraint || err.constraint === "auctions_listing_id_key")) {
+    // Only the one-auction-per-listing constraint maps to AUCTION_ALREADY_EXISTS; any other
+    // unique violation propagates unchanged. The explicit check above runs under the row lock;
+    // this catch also covers the constraint race. No second caller-reachable unique constraint exists here.
+    if (err?.code === "23505" && err.constraint === "auctions_listing_id_key") {
       throw new Error("AUCTION_ALREADY_EXISTS: Auction already exists for this listing.");
     }
     throw err;
