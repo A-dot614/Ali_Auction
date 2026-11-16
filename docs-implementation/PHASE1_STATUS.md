@@ -13,7 +13,7 @@
 | 3 | Categories and listing management | In progress (Slice 3a completed; Slice 3b moderation/public visibility completed for requested scope; auction scope pending) | Slice 3a implemented: placeholder categories (seeded `is_placeholder=true`, "PLACEHOLDER - NOT APPROVED"), listing drafts/create/update/submit, `myListings`, public `listing(slug)` (published-only, public-safe fields), listing state machine module, migration/tests/docs. Slice 3b added staff-only moderation mutations (approve/reject/pause/resume/remove) with `SELECT ... FOR UPDATE` concurrency control, audit logging decision (`listing.*` + `listing.transition_rejected`), self-moderation forbidden, and public visibility for all statuses. **No auctions/bids/scheduling enforcement** (requested times draft-only/non-binding). Moderation policy/UI/SLAs (docs/16 §8 #3, §8 #6, §7 #5, §7 #6) and seller notifications (Slice 8) remain open. |
 | 4 | Timed auction engine | Partial (Slice 4a + 4b close/publisher; snipe/reserve/scheduler pending) | **Live bidding OFF by default.** Slice 4a added auctions/auction_events/outbox schema, auction state machine, and owner-only `createAuction`. Slice 4b adds server-authoritative `closeAuction`/`closeDueAuctions` (idempotent, transactional) and an outbox publisher with in-memory/console sinks; no production scheduler is added. Snipe protection and reserve enforcement remain pending. |
 | 5 | Manual bidding and approved proxy-bidding baseline | Partial (Slice 4a manual bidding + 4b winner determination; proxy pending) | **Live bidding OFF by default; enabled for no user.** Slice 4a added flag-gated `placeBid` (server UTC window, idempotent `request_id`, transaction + row lock, minimum-bid placeholder increment, one outbox row per accepted bid) and public `auction`/`auctionForListing` queries. Slice 4b determines the winner at close from the highest accepted bid. Proxy bidding/tie-breaking not implemented (`proxy_bids` unused; `setProxyBid` → `NOT_IMPLEMENTED_PENDING_DECISION`). |
-| 6 | Search and browsing | Not started | No search/browse implementation; Postgres vs Elasticsearch for MVP is an open decision. |
+| 6 | Search and browsing | Partial (Slice 5 API complete; UI not built) | Slice 5 added published-only category browse and PostgreSQL FTS search (`searchListings`, `categoryListings`) with keyset pagination, sorts, filters, public-safe results and cursor unit/integration tests. Search is a derived projection over PostgreSQL (docs/03 §1/§7; docs/11 §5: PostgreSQL FTS for MVP). No Elasticsearch. UI/wireframes remain OPEN (docs/16 §8 #10). |
 | 7 | Checkout and selected payment provider | Not started (blocked) | **No real-money payments enabled.** Feature flag `FEATURE_REAL_MONEY_PAYMENTS_ENABLED` defaults to `false` and enforced off. Provider/charge/capture/payout/escrow decisions open; sandbox-only future work required. |
 | 8 | Orders and basic fulfilment | Not started | No order/fulfilment implementation in this slice. |
 | 9 | Admin moderation and audit trail | In progress (foundation) | `audit_logs` table + `recordAudit` helper implemented; sensitive auth actions recorded (`user.registered`, `user.email_verified`, `user.login`, `user.login_failed`, `user.logout`, `user.password_reset_requested`, `user.password_reset`, `user.role_change`). Admin-only GraphQL resolver (`adminHealth`) protected by server-side role check. Moderation queues/admin UI/RBAC expansion pending. |
@@ -414,3 +414,36 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 **Known TODOs:** real-time delivery (workstream 11, docs/03 §5); production scheduler (docs/16 §10 / docs/13); order consumer in Slice 6 (D4); reserve (docs/16 §3 #7/#8); proxy bidding and tie-breaking (docs/16 §3 #4); snipe protection/extensions (docs/16 §3 #5/#6). **Publisher concurrency:** `publishOutbox` has no row lock, so two concurrent publishers can deliver the same row twice before one marks it published; a later slice should use `SELECT … FOR UPDATE SKIP LOCKED` in the batch read (docs/03 §5).
 
 **Status:** workstreams 4 and 5 remain **partial**; no Slice 5 work started.
+
+## Slice 5 — Category browse and PostgreSQL FTS search (workstream 6, partial)
+
+**Scope:** public, published-only category browse and keyword search over listings. No Elasticsearch (PostgreSQL FTS for MVP: docs/11 §5); PostgreSQL is the source of truth and the GIN index is a derived projection (docs/03 §1, §7). No new mutations. **Not implemented:** search/browse UI (workstream 11, docs/16 §8 #10), expiry filter, approved categories/attributes, proxy/snipe/reserve, orders/payments.
+
+**Migration (reviewed, applied to dev DB):** `apps/api/migrations/1700000000600_listings_search_slice5.js`
+- Generated `listings.search_vector` tsvector column: `setweight(to_tsvector('simple', title), 'A') || setweight(to_tsvector('simple', description), 'B')`. Placeholder: `'simple'` config and the title/description field set are **NOT FOR PRODUCTION** (TODO docs/16 §8).
+- GIN index on `search_vector`; partial index `listings (category_id, published_at DESC, id DESC) WHERE status = 'published'`. Working down migration (indexes then column, reverse order). Migration roundtrip script expected list updated with `1700000000600`.
+
+**Operations (`apps/api/src/catalogue/search.ts`):**
+- `searchListings(input)`: trims query (max length `config.search.maxQueryLength`, default 200, TODO docs/16 §8); sorts `NEWEST | PRICE_ASC | PRICE_DESC | RELEVANCE` (only RELEVANCE uses `ts_rank`); optional category slug, condition, fulfilment filters; keyset pagination `first` 1–100 (default 20), opaque validated cursor; **only `status='published'` with non-null `published_at`**; all SQL uses parameter binding; no `now()`/`Date.now()`.
+- `listPublishedByCategory(slug, input)`: thin wrapper with category filter; unknown/inactive slug → `NOT_FOUND`.
+- `noResultsReason` codes: `NONE` (items exist), `NO_MATCHES` (query/filter returned nothing in a non-empty category/global search), `CATEGORY_EMPTY` (category has no published listings at all).
+- Public result reuses `PublicListing` type: title, description, category, condition, fulfilment_option, currency, starting_price_minor, published_at, media alt text only. No seller legal name, verification status, rejection reason, reviewer, storage keys, or seller internal IDs.
+
+**Config (`apps/api/src/config.ts`):** `config.search.maxQueryLength` (env `SEARCH_MAX_QUERY_LENGTH`, default 200, TODO docs/16 §8), `defaultPageSize=20`, `maxPageSize=100`.
+
+**GraphQL:** added queries `searchListings(input: SearchListingsInput!)` and `categoryListings(slug: String!, input: CategoryListingsInput)`; `SearchResult` type with `items`, `endCursor`, `hasMore`, `noResultsReason`; enums `SearchSort`, `NoResultsReason`; reused `ListingCondition` / `ListingFulfilmentOption` enums and `PublicListing` type. **No mutations added.**
+
+**State diagram:** `docs-implementation/search-state-diagram.md` (query flow, sort keys, cursor format, reason codes).
+
+**Tests (API, Vitest):**
+- `apps/api/test/search-cursor.test.ts`: cursor encode/decode round-trips for each sort; malformed/tampered/wrong-sort cursor → `VALIDATION_ERROR`; over-length query → `VALIDATION_ERROR`; empty/whitespace query treated as no query.
+- `apps/api/test/integration-search.test.ts`: unpublished states never returned; published hit / `NO_MATCHES`; `CATEGORY_EMPTY`; unknown/inactive category → `NOT_FOUND`; NEWEST/price sort and id tie-breaks; RELEVANCE title > description; condition/fulfilment filters; full keyset walk (no duplicates); cursor stability when a new listing is published between pages; paused listing absent on next page; public-field schema introspection + runtime check; source grep for `now()`/`Date.now()`; GraphQL query smoke test.
+
+**Placeholders / TODOs (NOT FOR PRODUCTION, docs/16 §8):**
+- `to_tsvector('simple', …)` avoids a language assumption; approved text-search configuration is OPEN (docs/16 §8).
+- Search field set is title (A) + description (B); attributes/fields are OPEN (docs/16 §8 #1).
+- Query length limit (default 200) and page-size limits are config placeholders; approved limits are OPEN (docs/16 §8).
+- **Known limitation:** no "expired" listing status exists in the schema, so no expiry filter is implemented (docs/16 §8 open).
+- Approved categories/attributes remain PLACEHOLDER (docs/16 §8 #1); UI/wireframes remain OPEN (docs/16 §8 #10).
+
+**Status:** workstream 6 — **partial** (API/search complete, UI not built). No Slice 6 work started.

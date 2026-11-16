@@ -38,6 +38,15 @@ export const config = {
       bidIncrementMinor: Number(env("AUCTION_BID_INCREMENT_MINOR", "100")),
     };
   },
+  // Search placeholders (Slice 5). TODO(docs/16 §8): approved query limits/search fields are OPEN.
+  get search() {
+    return {
+      // NOT FOR PRODUCTION placeholder: approved query length limit is OPEN (docs/16 §8).
+      maxQueryLength: Number(env("SEARCH_MAX_QUERY_LENGTH", "200")),
+      defaultPageSize: 20,
+      maxPageSize: 100,
+    };
+  },
 };
 
 export function assertSafeFeatureFlags() {

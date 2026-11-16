@@ -229,6 +229,36 @@ const PublicListingType = new GraphQLObjectType({
   },
 });
 
+const SearchSortEnum = new GraphQLEnumType({
+  name: "SearchSort",
+  values: {
+    NEWEST: { value: "NEWEST" },
+    PRICE_ASC: { value: "PRICE_ASC" },
+    PRICE_DESC: { value: "PRICE_DESC" },
+    RELEVANCE: { value: "RELEVANCE" },
+  },
+});
+
+const NoResultsReasonEnum = new GraphQLEnumType({
+  name: "NoResultsReason",
+  values: {
+    NONE: { value: "NONE" },
+    NO_MATCHES: { value: "NO_MATCHES" },
+    CATEGORY_EMPTY: { value: "CATEGORY_EMPTY" },
+  },
+});
+
+// Reuse PublicListingType for search items: only public-safe fields are present.
+const SearchResultType = new GraphQLObjectType({
+  name: "SearchResult",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(PublicListingType))) },
+    endCursor: { type: GraphQLString },
+    hasMore: { type: new GraphQLNonNull(GraphQLBoolean) },
+    noResultsReason: { type: new GraphQLNonNull(NoResultsReasonEnum) },
+  },
+});
+
 const AuctionStatusEnum = new GraphQLEnumType({
   name: "AuctionStatus",
   values: {
@@ -415,6 +445,31 @@ const ReviewSellerVerificationInput = new GraphQLInputObjectType({
   },
 });
 
+const SearchListingsInput = new GraphQLInputObjectType({
+  name: "SearchListingsInput",
+  fields: {
+    query: { type: GraphQLString },
+    categorySlug: { type: GraphQLString },
+    condition: { type: ListingConditionEnum },
+    fulfilmentOption: { type: ListingFulfilmentOptionEnum },
+    sort: { type: SearchSortEnum },
+    first: { type: GraphQLInt },
+    after: { type: GraphQLString },
+  },
+});
+
+const CategoryListingsInput = new GraphQLInputObjectType({
+  name: "CategoryListingsInput",
+  fields: {
+    query: { type: GraphQLString },
+    condition: { type: ListingConditionEnum },
+    fulfilmentOption: { type: ListingFulfilmentOptionEnum },
+    sort: { type: SearchSortEnum },
+    first: { type: GraphQLInt },
+    after: { type: GraphQLString },
+  },
+});
+
 const ListingDraftInput = new GraphQLInputObjectType({
   name: "ListingDraftInput",
   fields: {
@@ -478,6 +533,19 @@ const QueryType = new GraphQLObjectType({
       type: PublicListingType,
       args: { slug: { type: new GraphQLNonNull(GraphQLString) } },
       resolve: catalogueResolvers.Query.listing,
+    },
+    searchListings: {
+      type: new GraphQLNonNull(SearchResultType),
+      args: { input: { type: new GraphQLNonNull(SearchListingsInput) } },
+      resolve: catalogueResolvers.Query.searchListings,
+    },
+    categoryListings: {
+      type: new GraphQLNonNull(SearchResultType),
+      args: {
+        slug: { type: new GraphQLNonNull(GraphQLString) },
+        input: { type: CategoryListingsInput },
+      },
+      resolve: catalogueResolvers.Query.categoryListings,
     },
     pendingListingReviews: {
       type: new GraphQLNonNull(ListingConnection),

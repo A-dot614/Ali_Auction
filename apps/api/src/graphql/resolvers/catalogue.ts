@@ -1,5 +1,11 @@
 import { requireAuth, requireVerified, type GraphQLContext } from "../../auth/authz.js";
 import {
+  listPublishedByCategory,
+  searchListings,
+  type SearchListingsInput,
+  type SearchResult,
+} from "../../catalogue/search.js";
+import {
   approveListing,
   createListingDraft,
   getPublicListingBySlug,
@@ -39,10 +45,21 @@ function serializeListing(l: Listing) {
   };
 }
 
+function serializeSearchResult(result: SearchResult) {
+  // Items are already public-safe (no seller ids, legal names, verification, rejection reason, storage keys).
+  return result;
+}
+
 export const catalogueResolvers = {
   Query: {
     categories: async () => {
       return listActiveCategories();
+    },
+    searchListings: async (_: any, { input }: { input: SearchListingsInput }) => {
+      return serializeSearchResult(await searchListings(input));
+    },
+    categoryListings: async (_: any, { slug, input }: { slug: string; input?: SearchListingsInput }) => {
+      return serializeSearchResult(await listPublishedByCategory(slug, input ?? {}));
     },
     myListings: async (_: any, args: any, ctx: GraphQLContext) => {
       const user = requireAuth(ctx);
