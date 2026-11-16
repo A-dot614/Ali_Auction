@@ -1,14 +1,15 @@
 /**
- * Auction state machine (Slice 4a).
+ * Auction state machine (Slice 4a + Slice 4b close transitions).
  *
- * Lifecycle transitions implemented in Slice 4a:
+ * Lifecycle transitions:
  * - scheduled -> active (when the auction start time is reached; server UTC time).
+ * - scheduled -> closed_unsold (Slice 4b, D2: expired without activation, so there are no bids).
+ * - active -> closed_sold (Slice 4b, D1: close with a winning bid).
+ * - active -> closed_unsold (Slice 4b, D1 guard: close with no bid is impossible in active).
  * - Cancel: allowed only when the auction has no bids (staff action, reason required).
- *   - TODO(docs/16 §3 #9): seller cancellation after the first accepted bid is OPEN; not implemented in Slice 4a (cancel with bids -> TODO).
+ *   - TODO(docs/16 §3 #9): seller cancellation after the first accepted bid is OPEN; not implemented (cancel with bids -> TODO).
  *
- * Deferred to Slice 4b (not implemented in Slice 4a):
- * - active -> closed_sold | closed_unsold (auction close and winner determination).
- *
+ * The close transitions above are proposed placeholders, NOT FOR PRODUCTION, per docs/16 §3.
  * Every other transition throws INVALID_AUCTION_TRANSITION.
  */
 
@@ -30,11 +31,12 @@ export class InvalidAuctionTransitionError extends Error {
   }
 }
 
-// Allowed lifecycle transitions in Slice 4a. Close transitions (active -> closed_*) are deferred to Slice 4b.
-// TODO(docs/16 §3 #1): auction format (English ascending only) is OPEN; no other bid semantics in 4a.
+// Allowed lifecycle transitions. Close transitions are proposed placeholders (NOT FOR PRODUCTION).
+// TODO(docs/16 §3 #1): auction format (English ascending only) is OPEN.
+// TODO(docs/16 §3 #4): proxy tie-breaking is OPEN; D1 uses highest accepted amount (no tie possible in 4b).
 const ALLOWED: Record<AuctionStatus, AuctionStatus[]> = {
-  scheduled: ["active"],
-  active: [],
+  scheduled: ["active", "closed_unsold"],
+  active: ["closed_sold", "closed_unsold"],
   closed_sold: [],
   closed_unsold: [],
   cancelled: [],

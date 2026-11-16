@@ -55,6 +55,26 @@ export type BidResult = {
   error: { code: string; message: string } | null;
 };
 
+// Slice 4b close outcome. Money stays integer minor units as a string to avoid float/Number overflow.
+export type AuctionOutcome = {
+  status: "closed_sold" | "closed_unsold";
+  winningBidId: string | null;
+  winningAmountMinor: string | null;
+  winnerBidderLabel: string | null;
+};
+
+export type CloseResult = AuctionOutcome & {
+  auctionId: string;
+  // false for an idempotent replay of an already-closed auction (no rows written).
+  changed: boolean;
+};
+
+export type OutcomeBidInput = {
+  id: string;
+  amountMinor: number | string;
+  bidderUserId: string;
+};
+
 export type CreateAuctionInput = {
   listingId: string;
   startsAt: Date;
@@ -85,6 +105,40 @@ function toMinOrThrow(value: number | string): string {
 function bidderLabelFor(userId: string): string {
   const digest = createHash("sha256").update(userId).digest("hex");
   return `bidder-${digest.slice(0, 16)}`;
+}
+
+/**
+ * D1 (Slice 4b, proposed placeholder; NOT FOR PRODUCTION, docs/16 §3 #4):
+ * highest accepted amount wins. Because every accepted bid must exceed the current price by a
+ * strictly positive increment, two accepted bids cannot tie on amount, so no proxy tie-break is
+ * needed in 4b. Reserve is ignored (D3, TODO docs/16 §3 #7).
+ */
+export function determineAuctionOutcome(bids: OutcomeBidInput[]): AuctionOutcome {
+  if (bids.length === 0) {
+    return {
+      status: "closed_unsold",
+      winningBidId: null,
+      winningAmountMinor: null,
+      winnerBidderLabel: null,
+    };
+  }
+  const amountOf = (b: OutcomeBidInput) => BigInt(typeof b.amountMinor === "string" ? b.amountMinor : String(b.amountMinor));
+  let winner = bids[0];
+  let max = amountOf(winner);
+  for (const bid of bids.slice(1)) {
+    const amount = amountOf(bid);
+    if (amount > max) {
+      max = amount;
+      winner = bid;
+    }
+  }
+  return {
+    status: "closed_sold",
+    winningBidId: winner.id,
+    winningAmountMinor: max.toString(),
+    // Public label only; the bidder user id never enters the outbox payload.
+    winnerBidderLabel: bidderLabelFor(winner.bidderUserId),
+  };
 }
 
 function mapAuction(row: any): Auction {
@@ -441,6 +495,162 @@ export async function placeBid(
     }
     return result;
   });
+}
+
+export type CloseAuctionOptions = {
+  now?: () => Date;
+  // Test hooks, both invoked inside the close transaction.
+  afterStatusUpdate?: (auctionId: string) => Promise<void> | void;
+  beforeCommit?: (auctionId: string) => Promise<void> | void;
+};
+
+export type CloseDueResult = {
+  closed: number;
+  skipped: number; // selected but already closed (idempotent no-op)
+  failed: number;
+  errors: Array<{ auctionId: string; message: string }>;
+};
+
+async function existingCloseResult(client: any, auction: any, auctionId: string): Promise<CloseResult> {
+  const outbox = await client.query(
+    `SELECT payload FROM outbox_events
+     WHERE aggregate_type='auction' AND aggregate_id=$1 AND event_type='auction.closed'
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [auctionId]
+  );
+  const payload = outbox.rows[0]?.payload as
+    | { status?: string; winningBidId?: string | null; winningAmountMinor?: string | null; winnerBidderLabel?: string | null }
+    | undefined;
+  if (payload) {
+    return {
+      auctionId,
+      status: (payload.status ?? auction.status) as "closed_sold" | "closed_unsold",
+      winningBidId: payload.winningBidId ?? null,
+      winningAmountMinor: payload.winningAmountMinor ?? null,
+      winnerBidderLabel: payload.winnerBidderLabel ?? null,
+      changed: false,
+    };
+  }
+  // Defensive fallback if the close event is missing: derive from the immutable bid ledger.
+  const bidRes = await client.query(
+    `SELECT id, amount_minor, bidder_user_id FROM bids WHERE auction_id=$1
+     ORDER BY amount_minor DESC, accepted_at DESC, id DESC LIMIT 1`,
+    [auctionId]
+  );
+  const top = bidRes.rows[0];
+  return {
+    auctionId,
+    status: auction.status as "closed_sold" | "closed_unsold",
+    winningBidId: top?.id ?? null,
+    winningAmountMinor: top ? String(top.amount_minor) : null,
+    winnerBidderLabel: top ? bidderLabelFor(top.bidder_user_id) : null,
+    changed: false,
+  };
+}
+
+/**
+ * Server-authoritative close (Slice 4b). All writes and the row lock live in one transaction;
+ * every timestamp is bound to the injected clock, never SQL now().
+ */
+export async function closeAuction(auctionId: string, opts?: CloseAuctionOptions): Promise<CloseResult> {
+  const now = opts?.now ?? (() => new Date());
+  return withTransaction(async (client) => {
+    const auctionRes = await client.query(`SELECT * FROM auctions WHERE id=$1 FOR UPDATE`, [auctionId]);
+    if ((auctionRes.rowCount ?? 0) === 0) {
+      throw new Error("NOT_FOUND: Auction not found.");
+    }
+    const auction = auctionRes.rows[0];
+    const at = now();
+
+    // Idempotent no-op: an already-closed auction returns its existing outcome and writes nothing.
+    if (auction.status === "closed_sold" || auction.status === "closed_unsold") {
+      return existingCloseResult(client, auction, auctionId);
+    }
+    if (!(at >= auction.ends_at)) {
+      throw new Error("AUCTION_NOT_DUE: Auction has not reached ends_at.");
+    }
+
+    const bidsRes = await client.query(
+      `SELECT id, amount_minor, bidder_user_id FROM bids WHERE auction_id=$1
+       ORDER BY amount_minor DESC, accepted_at DESC, id DESC`,
+      [auctionId]
+    );
+    const outcome = determineAuctionOutcome(
+      bidsRes.rows.map((row: any) => ({
+        id: row.id,
+        amountMinor: String(row.amount_minor),
+        bidderUserId: row.bidder_user_id,
+      }))
+    );
+
+    // Every status change goes through the state machine (D2: scheduled -> closed_unsold allowed).
+    assertTransition(auction.status, outcome.status);
+    await client.query(
+      `UPDATE auctions SET status=$2, winning_bid_id=$3, closed_at=$4, updated_at=$4 WHERE id=$1`,
+      [auctionId, outcome.status, outcome.winningBidId, at]
+    );
+    if (opts?.afterStatusUpdate) await opts.afterStatusUpdate(auctionId);
+
+    await client.query(
+      `INSERT INTO auction_events (auction_id, from_status, to_status, actor_user_id, created_at)
+       VALUES ($1, $2, $3, NULL, $4)`,
+      [auctionId, auction.status, outcome.status, at]
+    );
+    // D7: system action uses a NULL actor; before/after statuses live in metadata.
+    await client.query(
+      `INSERT INTO audit_logs (actor_user_id, action, target_type, target_id, reason, metadata, created_at)
+       VALUES (NULL, 'auction.closed', 'auction', $1, 'system_close', $2::jsonb, $3)`,
+      [auctionId, JSON.stringify({ beforeStatus: auction.status, afterStatus: outcome.status }), at]
+    );
+    // D4: one auction.closed event; Slice 6 will consume it to create the order.
+    await client.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('auction', $1, 'auction.closed', $2::jsonb, $3)`,
+      [
+        auctionId,
+        JSON.stringify({
+          auctionId,
+          status: outcome.status,
+          winningBidId: outcome.winningBidId,
+          winningAmountMinor: outcome.winningAmountMinor,
+          winnerBidderLabel: outcome.winnerBidderLabel,
+        }),
+        at,
+      ]
+    );
+    if (opts?.beforeCommit) await opts.beforeCommit(auctionId);
+    return { auctionId, ...outcome, changed: true };
+  });
+}
+
+/**
+ * D5: close all due auctions, each in its own transaction. Scheduling (cron/worker) is a
+ * deployment decision (TODO docs/16 §10 / docs/13); this is a callable job function only.
+ */
+export async function closeDueAuctions(opts?: CloseAuctionOptions): Promise<CloseDueResult> {
+  const now = opts?.now ?? (() => new Date());
+  const at = now();
+  const due = await query(
+    `SELECT id FROM auctions WHERE ends_at <= $1 AND status IN ('scheduled', 'active') ORDER BY ends_at, id`,
+    [at]
+  );
+  const result: CloseDueResult = { closed: 0, skipped: 0, failed: 0, errors: [] };
+  for (const row of due.rows) {
+    const auctionId = row.id as string;
+    try {
+      const outcome = await closeAuction(auctionId, {
+        now: () => at,
+        afterStatusUpdate: opts?.afterStatusUpdate ? (id) => opts.afterStatusUpdate!(id) : undefined,
+        beforeCommit: opts?.beforeCommit ? (id) => opts.beforeCommit!(id) : undefined,
+      });
+      if (outcome.changed) result.closed += 1;
+      else result.skipped += 1;
+    } catch (err: any) {
+      result.failed += 1;
+      result.errors.push({ auctionId, message: err?.message ?? String(err) });
+    }
+  }
+  return result;
 }
 
 export async function setProxyBid(): Promise<never> {

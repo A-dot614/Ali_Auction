@@ -10,19 +10,34 @@ import {
   type AuctionStatus,
 } from "../src/auction/auctionStateMachine.js";
 import { minimumBidMinor } from "../src/auction/minimumBid.js";
+import { determineAuctionOutcome } from "../src/auction/service.js";
 import { config } from "../src/config.js";
 
 describe("auction state machine (Slice 4a)", () => {
   const allowedPairs: Array<[AuctionStatus, AuctionStatus]> = [
     ["scheduled", "active"],
+    ["scheduled", "closed_unsold"],
+    ["active", "closed_sold"],
+    ["active", "closed_unsold"],
   ];
 
   it("exposes allowed transitions per state", () => {
-    expect(getAllowedTransitions("scheduled")).toEqual(["active"]);
-    expect(getAllowedTransitions("active")).toEqual([]);
+    expect(getAllowedTransitions("scheduled")).toEqual(["active", "closed_unsold"]);
+    expect(getAllowedTransitions("active")).toEqual(["closed_sold", "closed_unsold"]);
     expect(getAllowedTransitions("closed_sold")).toEqual([]);
     expect(getAllowedTransitions("closed_unsold")).toEqual([]);
     expect(getAllowedTransitions("cancelled")).toEqual([]);
+  });
+
+  it("allows scheduled → closed_unsold and active → closed_sold/closed_unsold (Slice 4b)", () => {
+    // D2 and D1 proposed placeholders (docs/16 §3), NOT FOR PRODUCTION.
+    for (const from of ["scheduled", "active"] as AuctionStatus[]) {
+      const expected = from === "scheduled" ? ["closed_unsold"] : ["closed_sold", "closed_unsold"];
+      for (const to of expected as AuctionStatus[]) {
+        expect(canTransition(from, to)).toBe(true);
+        expect(() => assertTransition(from, to)).not.toThrow();
+      }
+    }
   });
 
   it("allows every allowed pair", () => {
@@ -105,5 +120,46 @@ describe("minimum bid calculation (Slice 4a)", () => {
         incrementMinor: 500,
       })
     ).toBe(1600);
+  });
+});
+
+describe("auction close outcome (Slice 4b)", () => {
+  it("no bids → closed_unsold with no winner", () => {
+    expect(determineAuctionOutcome([])).toEqual({
+      status: "closed_unsold",
+      winningBidId: null,
+      winningAmountMinor: null,
+      winnerBidderLabel: null,
+    });
+  });
+
+  it("one bid → closed_sold with that bid as winner", () => {
+    const outcome = determineAuctionOutcome([
+      { id: "bid-1", amountMinor: 2500, bidderUserId: "user-1" },
+    ]);
+    expect(outcome.status).toBe("closed_sold");
+    expect(outcome.winningBidId).toBe("bid-1");
+    expect(outcome.winningAmountMinor).toBe("2500");
+    expect(outcome.winnerBidderLabel).toMatch(/^bidder-[0-9a-f]{16}$/);
+    expect(outcome.winnerBidderLabel).not.toContain("user-1");
+  });
+
+  it("several bids → highest amount wins", () => {
+    const outcome = determineAuctionOutcome([
+      { id: "bid-1", amountMinor: 2500, bidderUserId: "user-1" },
+      { id: "bid-2", amountMinor: "2900", bidderUserId: "user-2" },
+      { id: "bid-3", amountMinor: 2700, bidderUserId: "user-3" },
+    ]);
+    expect(outcome.status).toBe("closed_sold");
+    expect(outcome.winningAmountMinor).toBe("2900");
+  });
+
+  it("winning bid id is the max even when amounts are bigint strings", () => {
+    const outcome = determineAuctionOutcome([
+      { id: "small", amountMinor: "9007199254740993", bidderUserId: "user-1" },
+      { id: "large", amountMinor: "9007199254740994", bidderUserId: "user-2" },
+    ]);
+    expect(outcome.winningBidId).toBe("large");
+    expect(outcome.winningAmountMinor).toBe("9007199254740994");
   });
 });
