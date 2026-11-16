@@ -491,11 +491,17 @@ export async function approveListing(listingId: string, reviewerUserId: string):
   });
 }
 
-export async function rejectListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+export async function rejectListing(
+  listingId: string,
+  reviewerUserId: string,
+  reason: string | null,
+  opts?: { clock?: () => Date }
+): Promise<Listing> {
   const trimmedReason = (reason || "").trim();
   if (!trimmedReason) {
     throw new Error("VALIDATION_ERROR: Reason is required for reject.");
   }
+  const notificationAt = (opts?.clock ?? (() => new Date()))();
   return withTransaction(async (client) => {
     const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
     if (sellerUserId === reviewerUserId) {
@@ -532,6 +538,12 @@ export async function rejectListing(listingId: string, reviewerUserId: string, r
       },
       client
     );
+    // Slice 8 (D2): seller notice via the outbox consumer; no inline email, no reason leaked.
+    await client.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('listing', $1, 'listing.rejected', $2::jsonb, $3)`,
+      [listingId, JSON.stringify({ listingId, sellerUserId }), notificationAt]
+    );
     return mapListing(updated.rows[0]);
   });
 }
@@ -540,12 +552,14 @@ export async function pauseListing(
   listingId: string,
   reviewerUserId: string,
   reason: string | null,
-  client?: pg.PoolClient
+  client?: pg.PoolClient,
+  opts?: { clock?: () => Date }
 ): Promise<Listing> {
   const trimmedReason = (reason || "").trim();
   if (!trimmedReason) {
     throw new Error("VALIDATION_ERROR: Reason is required for pause.");
   }
+  const notificationAt = (opts?.clock ?? (() => new Date()))();
   const run = async (tx: pg.PoolClient) => {
     const { listing, sellerUserId } = await lockListingForModeration(tx, listingId);
     if (sellerUserId === reviewerUserId) {
@@ -581,6 +595,12 @@ export async function pauseListing(
         metadata: { before: status, after: "paused", listingId },
       },
       tx
+    );
+    // Slice 8 (D2): seller notice via the outbox consumer; no inline email, no reason leaked.
+    await tx.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('listing', $1, 'listing.paused', $2::jsonb, $3)`,
+      [listingId, JSON.stringify({ listingId, sellerUserId }), notificationAt]
     );
     return mapListing(updated.rows[0]);
   };
@@ -629,11 +649,17 @@ export async function resumeListing(listingId: string, reviewerUserId: string): 
   });
 }
 
-export async function removeListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+export async function removeListing(
+  listingId: string,
+  reviewerUserId: string,
+  reason: string | null,
+  opts?: { clock?: () => Date }
+): Promise<Listing> {
   const trimmedReason = (reason || "").trim();
   if (!trimmedReason) {
     throw new Error("VALIDATION_ERROR: Reason is required for remove.");
   }
+  const notificationAt = (opts?.clock ?? (() => new Date()))();
   return withTransaction(async (client) => {
     const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
     if (sellerUserId === reviewerUserId) {
@@ -669,6 +695,12 @@ export async function removeListing(listingId: string, reviewerUserId: string, r
         metadata: { before: status, after: "removed", listingId },
       },
       client
+    );
+    // Slice 8 (D2): seller notice via the outbox consumer; no inline email, no reason leaked.
+    await client.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('listing', $1, 'listing.removed', $2::jsonb, $3)`,
+      [listingId, JSON.stringify({ listingId, sellerUserId }), notificationAt]
     );
     return mapListing(updated.rows[0]);
   });

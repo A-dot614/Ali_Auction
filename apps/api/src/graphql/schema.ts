@@ -16,6 +16,7 @@ import { catalogueResolvers } from "./resolvers/catalogue.js";
 import { ordersResolvers } from "./resolvers/orders.js";
 import { auctionResolvers } from "./resolvers/auction.js";
 import { reportsResolvers } from "./resolvers/reports.js";
+import { notificationsResolvers } from "./resolvers/notifications.js";
 
 const HealthType = new GraphQLObjectType({
   name: "Health",
@@ -691,6 +692,50 @@ const AccountStatusResultType = new GraphQLObjectType({
   },
 });
 
+// Slice 8 - notifications. Categories/templates are NOT FOR PRODUCTION placeholders (docs/16 §7 #3, §8 #6).
+const NotificationCategoryEnum = new GraphQLEnumType({
+  name: "NotificationCategory",
+  description: "NOT FOR PRODUCTION placeholder categories pending copy review (docs/16 §7 #3, §8 #6).",
+  values: {
+    verification: { value: "verification" },
+    password_reset: { value: "password_reset" },
+    auction_outbid: { value: "auction_outbid" },
+    auction_result: { value: "auction_result" },
+    order_update: { value: "order_update" },
+    payment_update: { value: "payment_update" },
+    fulfilment_update: { value: "fulfilment_update" },
+    listing_moderation: { value: "listing_moderation" },
+    account_status: { value: "account_status" },
+    report_result: { value: "report_result" },
+    marketing: { value: "marketing" },
+  },
+});
+
+// Recipient-facing type only: no source_event_id, delivery status, or other user's data.
+const NotificationType = new GraphQLObjectType({
+  name: "Notification",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    category: { type: new GraphQLNonNull(NotificationCategoryEnum) },
+    title: { type: new GraphQLNonNull(GraphQLString) },
+    body: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    readAt: { type: GraphQLString },
+    resourceType: { type: GraphQLString },
+    resourceId: { type: GraphQLID },
+    // D5: relative path only; resolved for the authenticated owner.
+    link: { type: GraphQLString },
+  },
+});
+
+const NotificationConnection = new GraphQLObjectType({
+  name: "NotificationConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(NotificationType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
 const QueryType = new GraphQLObjectType({
   name: "Query",
   fields: {
@@ -797,6 +842,19 @@ const QueryType = new GraphQLObjectType({
       type: new GraphQLNonNull(ReportStaffType),
       args: { id: { type: new GraphQLNonNull(GraphQLID) } },
       resolve: reportsResolvers.Query.reportForStaff,
+    },
+    myNotifications: {
+      type: new GraphQLNonNull(NotificationConnection),
+      args: {
+        first: { type: GraphQLInt },
+        after: { type: GraphQLString },
+        unreadOnly: { type: GraphQLBoolean },
+      },
+      resolve: notificationsResolvers.Query.myNotifications,
+    },
+    unreadCount: {
+      type: new GraphQLNonNull(GraphQLInt),
+      resolve: notificationsResolvers.Query.unreadCount,
     },
   },
 });
@@ -988,6 +1046,11 @@ const MutationType = new GraphQLObjectType({
         reason: { type: new GraphQLNonNull(GraphQLString) },
       },
       resolve: reportsResolvers.Mutation.reinstateUser,
+    },
+    markNotificationRead: {
+      type: new GraphQLNonNull(NotificationType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: notificationsResolvers.Mutation.markNotificationRead,
     },
   },
 });

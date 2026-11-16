@@ -49,6 +49,12 @@ export async function applySuspension(
     },
     client
   );
+  // Slice 8 (D2): neutral account-status notice via the outbox; no staff reason in the payload.
+  await client.query(
+    `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+     VALUES ('user', $1, 'account.suspended', $2::jsonb, $3)`,
+    [userId, JSON.stringify({ userId }), at]
+  );
   return { userId, before, after: "suspended" };
 }
 

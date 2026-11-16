@@ -165,6 +165,16 @@ export async function consumeAuctionClosedEvents(opts?: ServiceOptions & { max?:
            VALUES ($1, NULL, 'awaiting_payment', NULL, NULL, $2)`,
           [orderRes.rows[0].id, at]
         );
+        // Slice 8 (D2): order.created outbox event for the notifications consumer, committed here.
+        await client.query(
+          `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+           VALUES ('order', $1, 'order.created', $2::jsonb, $3)`,
+          [
+            orderRes.rows[0].id,
+            JSON.stringify({ orderId: orderRes.rows[0].id, buyerUserId: bidRes.rows[0].bidder_user_id }),
+            at,
+          ]
+        );
         result.created += 1;
       });
     } catch {
@@ -311,6 +321,19 @@ export async function recordFulfilment(
       reason = `shipped via ${carrier} tracking ${tracking}`;
     }
     await transitionOrder(client, order, to, actor.id, reason, at);
+    // Slice 8 (D2): notify the buyer of fulfilment transitions via the outbox.
+    if (to === "shipped" || to === "ready_for_pickup") {
+      await client.query(
+        `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+         VALUES ('order', $1, $2, $3::jsonb, $4)`,
+        [
+          orderId,
+          `order.${to}`,
+          JSON.stringify({ orderId, buyerUserId: order.buyer_user_id }),
+          at,
+        ]
+      );
+    }
     if (action === "mark_shipped" || action === "ready_for_pickup") {
       await client.query(
         `INSERT INTO shipments (order_id, method, carrier, tracking_number, created_at, updated_at)

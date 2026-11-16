@@ -69,6 +69,15 @@ export const config = {
       maxReportDetailsLength: Number(env("MAX_REPORT_DETAILS_LENGTH", "2000")),
     };
   },
+  // Notification placeholders (Slice 8). All NOT FOR PRODUCTION.
+  // TODO(docs/16 §7 #3, §8 #6): categories/copy/provider remain OPEN.
+  get notifications() {
+    return {
+      // Placeholder retry cap; no approved delivery policy exists yet (docs/11 §6).
+      maxDeliveryAttempts: Number(env("NOTIFICATION_MAX_DELIVERY_ATTEMPTS", "5")),
+      batchSize: Number(env("NOTIFICATION_BATCH_SIZE", "100")),
+    };
+  },
   get fulfilment() {
     return {
       // No shipping rate decision exists yet; shipping fee stays 0 (docs/16 §6).

@@ -11,7 +11,8 @@ import type { AppUser } from "../auth/service.js";
 /**
  * Reports and moderation (Slice 7).
  * D1 categories are a NOT FOR PRODUCTION placeholder; TODO(docs/16 §7 #5).
- * Moderation stays manual (docs/16 §8 #3). No notifications are sent (Slice 8).
+ * Moderation stays manual (docs/16 §8 #3). Reporter/reported-party notices are
+ * produced by the outbox consumer (Slice 8, D2), never inline here.
  * All timestamps come from the injected clock; no SQL clock functions or
  * wall-clock reads outside the injected clock are used in this module.
  */
@@ -308,6 +309,24 @@ export async function resolveReport(
         createdAt: at,
       },
       client
+    );
+    // Slice 8 (D2): outcome-only notice for the reporter, neutral notice for the
+    // reported party only when an action was taken. No reporter id in either body.
+    await client.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('report', $1, 'report.resolved', $2::jsonb, $3)`,
+      [
+        reportId,
+        JSON.stringify({
+          reportId,
+          reporterUserId: report.reporterUserId,
+          targetType: report.targetType,
+          targetId: report.targetId,
+          decision: resolvedDecision,
+          action: resolvedAction,
+        }),
+        at,
+      ]
     );
     return mapReport(updated.rows[0]);
   });

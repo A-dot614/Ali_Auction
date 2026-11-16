@@ -2,7 +2,7 @@
 
 **Roadmap source:** `docs/15-delivery-roadmap.md`  
 **Scope basis:** `docs/01-product-requirements-document.md`, `docs/02-epics-user-stories.md`  
-**Last updated:** 2026-11-16 (Slices 0–6 complete for their scope; Slice 7 reports/moderation/suspension/audit completed; stopped before Slice 8)
+**Last updated:** 2026-11-16 (Slices 0–7 complete for their scope; Slice 8 notifications/outbox consumer/in-app+console delivery completed; stopped before Slice 9)
 
 ## Phase 1 workstreams
 
@@ -17,7 +17,7 @@
 | 7 | Checkout and selected payment provider | Partial (Slice 6 sandbox only) | **No real-money payments enabled.** Flag `FEATURE_REAL_MONEY_PAYMENTS_ENABLED` defaults OFF and is asserted OFF at production startup (incl. `assertMoneyFlagsOffForProduction`). Slice 6 adds fake-provider checkout, signed sandbox webhooks, payments/refunds behind the flag. No Stripe/PayPal, live capture, escrow or payouts. |
 | 8 | Orders and basic fulfilment | Partial (Slice 6 manual fulfilment) | Slice 6 adds orders created from `auction.closed` outbox events, fee snapshots, participant-scoped order queries, manual shipping/pickup fulfilment and internal refunds. No carrier integrations, shipping rates or tax. |
 | 9 | Admin moderation and audit trail | Partial (Slice 7 reports/queue/suspension/audit) | `audit_logs` + `recordAudit`; auth event audit; admin-only `adminHealth`. Slice 7 adds user reports, a staff-only moderation queue, manual report resolution, user suspension/reinstatement via state machines, and one-audit-row-per-privileged-mutation coverage with an append-only guard. **No UI (Slice 9), no appeal workflow (docs/16 §7 #6), no notifications (Slice 8), no automated moderation (docs/16 §8 #3).** |
-| 10 | Notifications | Not started | Notification domain not implemented; outbox/events pending reviewed migrations. |
+| 10 | Notifications | Partial (Slice 8 outbox consumer + in-app/console) | Notification table, per-user preferences, delivery attempts and an idempotent outbox consumer are implemented. In-app and dev-console email sinks only. **No real email/SMS/push provider (docs/11 §6), no real-time delivery (docs/03 §5), no marketing category, no UI (Slice 9).** |
 | 11 | Responsive web/PWA | Started (scaffold) | Next.js scaffold remains; no identity UI flows wired yet. |
 | 12 | Security, privacy, support and observability | In progress (foundation) | Env loading, secure cookie settings baseline, auth rate limiting, authz enforcement, audit logging for auth events, safe-by-default feature flags for live bidding/real-money. Pending: full threat model, CSRF strategy review, Redis-backed/distributed rate limits, structured logging/metrics/tracing/alerts, privacy workflows, support tooling, security/compliance reviews. |
 
@@ -304,7 +304,7 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 - All moderation transactions: `SELECT … FOR UPDATE` on listing row, read current status, validate via `listingStateMachine.assertTransition`, update, single audit write. Concurrent approves serialize on the row lock → exactly one success / one `INVALID_LISTING_TRANSITION`.
 - Self-moderation forbidden: moderator cannot act on a listing owned by their own seller profile → `FORBIDDEN` (checked in resolver + service).
 - Reviewer identity appears only in `audit_logs` (actor_user_id), never in seller-facing/public responses.
-- Seller notification on reject/pause/remove: **TODO for Slice 8** (no inline email; `src/email` remains dev-console/provider-agnostic TODO).
+- Seller notification on reject/pause/remove: **implemented in Slice 8 (D2)** — the moderation code paths emit `listing.rejected`/`listing.paused`/`listing.removed` outbox events consumed by the notifications consumer; no inline email.
 
 **Public visibility:** `listing(slug)` returns **published only** (all other statuses incl. draft/pending_review/rejected/paused/removed → same `NOT_FOUND`); public-safe fields only (title, description, category incl. placeholder flag, condition, fulfilment_option, currency, starting_price_minor, published_at, media alt_text/sort only); no storage_key/rejection_reason/moderation fields/legal_name/verification status/internal IDs beyond allowed public fields; `ListingPublic` schema test asserts no private field names.
 
@@ -325,7 +325,7 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 - **§7 #5** Prohibited/restricted items policy: **OPEN** — reject reasons/approvals must align with approved list later (not invented in 3b).
 - **§8 #6** Moderation UI: **OPEN** — no UI implemented (listings UI remains docs/16 §8 #6).
 - **§7 #6** Rejection appeal path: **OPEN** — rejected→draft owner revision implemented; formal appeal workflow remains future slice (`docs/16` §7 #6).
-- **Slice 8** Seller notifications on reject/pause/remove: **TODO** (no inline email implemented in 3b).
+- **Slice 8** Seller notifications on reject/pause/remove: **implemented via D2 outbox events** (no inline email in 3b; consumer produces neutral notices).
 
 **Workstream status:** #3 Categories and listing management — **In progress (Slice 3a + Slice 3b completed for requested scope)**. Slice 4a subsequently added auction schema + manual bidding behind an OFF flag (see below); auction close/proxy/snipe/reserve remain pending. Live bidding and real-money payments remain **OFF** by enforced defaults.
 
@@ -499,7 +499,7 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 - **D9 Reinstatement:** `reinstateUser(userId, reason)` moves `suspended → active`, reason required, one audit row. Sessions are not restored; the user logs in again. **Appeal workflow is OPEN — placeholder citing `docs/16 §7 #6`.**
 - **D10 Resolution:** `resolveReport(reportId, decision, reason, action)` with `decision = actioned|dismissed`, `action = none|hide_listing|suspend_user`; reason required; `actioned` takes a target action in the same transaction or `none` (no_action_needed). Sets `resolved_by`, `resolved_at`, `status`, `resolution_reason`, one audit row. A second resolution → `INVALID_REPORT_TRANSITION`, writes nothing. `hide_listing` is listing-only; `suspend_user` is user-only (mismatch → `VALIDATION_ERROR`).
 - **D11 Audit coverage:** every privileged mutation writes exactly one audit row on success (actor, action, target type/id, before/after status metadata, reason); denied calls write none. `audit_logs` has no update/delete path — a source-guard test asserts no `UPDATE audit_logs` / `DELETE FROM audit_logs` anywhere in `apps/api/src`. A test enumerates all ten privileged mutations by name.
-- **D12 Notifications:** none sent in Slice 7. Seller/reporter notifications are a TODO for Slice 8 (outbox consumer); no inline email.
+- **D12 Notifications:** none sent inline in Slice 7. Seller/reporter notices are produced in Slice 8 by the outbox consumer (D2); no inline email.
 
 **Operations / GraphQL:** mutations `reportListing`, `reportUser`, `resolveReport`, `suspendUser`, `reinstateUser`; queries `pendingReports`, `reportForStaff`. Types `ReportStaffType` (reporter id + internal status, staff only), `ReportReceipt` (minimal, reporter-facing), `ReportConnection`, `AccountStatusResult`, enums `ReportCategory`/`ReportTargetType`/`ReportStatus`/`ReportDecision`/`ModerationAction`. No query or mutation exposes `audit_logs` rows. All timestamps come from the injected clock; no SQL clock functions or `Date.now()` in new source.
 
@@ -510,3 +510,33 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 **Open decisions / placeholders (NOT invented; recorded above with docs/16 references):** §3 #14 suspension while bidding (D8), §7 #5 prohibited/restricted items and report categories (D1), §7 #6 appeals (D9), §8 #3 manual moderation only (D10/D11). Notifications Slice 8; UI/PWA Slice 9.
 
 **Workstream status:** #9 Admin moderation and audit trail — **partial** (API-only reports, manual moderation, suspension and audit coverage). No UI, no appeal workflow, no notifications. Slice 8 not started.
+
+## Slice 8 — Notifications from the outbox (workstream 10, partial)
+
+**Scope:** US-I01 / Epic I. Notifications are produced by an idempotent outbox consumer from committed events, never inline in request handlers. **Not implemented:** real email/SMS/push providers (docs/11 §6), Socket.io/real-time delivery (docs/03 §5), UI/preferences screens and PWA (Slice 9), proxy bidding, snipe, reserve enforcement, or any new order/payment behaviour. `docs/16` unchanged; no applied migration modified.
+
+**Migration (reviewed):** `apps/api/migrations/1700000000900_notifications_slice8.js`
+- `notifications`: id, `user_id` FK users (cascade), `category` enum, title, body, `resource_type`/`resource_id` nullable, `source_event_id` (outbox event id), `created_at` (injected clock), `read_at` nullable; unique `(user_id, source_event_id, category)` so one event yields at most one notification per recipient/category.
+- `notification_preferences`: PK `(user_id, category, channel)`, `enabled` boolean. `notification_deliveries`: id, `notification_id` FK (cascade), `channel`, `status` enum (`pending`,`sent`,`failed`), `attempts`, `last_error_category` (fixed category only, no raw text), `sent_at`, timestamps; unique `(notification_id, channel)`.
+- Indexes `notifications(user_id, created_at DESC, id DESC)` and partial `notifications(user_id) WHERE read_at IS NULL`. Constraints via `createTable` options; working down migration in reverse order. Roundtrip expected list updated with `1700000000900`.
+
+**Decisions (proposed placeholders; NOT FOR PRODUCTION where noted):**
+- **D1 Consumer framework:** generic `consumeOutbox(consumerName, handler, opts)` in `apps/api/src/outbox/consumer.ts` reads unprocessed rows in `created_at, id` order in batches; `processed_events` marker and handler writes share one transaction; a handler failure leaves the row unprocessed and stops the batch; replays are no-ops. Reuses the Slice 6 `processed_events` table.
+- **D2 Notification producer:** consumer `notifications` (`apps/api/src/notifications/consumer.ts`) maps committed events to notification rows. Handled: `auction.bid.accepted` (seller + previous high bidder, opaque labels only), `auction.closed` (winner + seller on `closed_sold`, seller only on `closed_unsold`), `order.created` (buyer), `order.paid` (seller), `order.shipped`/`order.ready_for_pickup` (buyer), `listing.rejected`/`listing.paused`/`listing.removed` (seller), `account.suspended` (affected user, neutral text), `report.resolved` (reporter gets outcome category only, never target identity; reported party gets a neutral notice only when an action was taken). Missing event writes were added to the existing transition paths in the same transaction (orders, payments, catalogue, accounts, reports), each marked `Slice 8 (D2)`. No new business behaviour.
+- **D3 Preferences:** `notification_preferences` per user/category/channel; transactional categories are always delivered and cannot be disabled (placeholder list pending docs/16 §7 #3 review). Marketing and watch-style categories are opt-in default OFF; no marketing message is produced in this slice.
+- **D4 Delivery:** `notification_deliveries` with attempts/status/last-error-category/sent_at (injected clock). `deliverPending(sinks, opts)` uses a `NotificationSink` interface; sinks: `InAppSink` (the notification row is the in-app delivery) and `ConsoleEmailSink` (wraps the existing dev-console provider). Failures increment attempts, store only a fixed error category, and retry until the configured cap (placeholder default 5).
+- **D5 Authenticated links:** notification data carries only resource IDs; the GraphQL `Notification.link` is a relative path resolved for the authenticated owner. No unauthenticated link exists.
+- **D6 Read state:** `markNotificationRead(id)` is owner-only (others get `NOT_FOUND`) and idempotent; `read_at` set once from the injected clock.
+- **D7 Queries:** `myNotifications(first, after, unreadOnly)` cursor-paginated by `created_at, id` (limit 1–100) and `unreadCount`, both scoped to the authenticated caller.
+- **D8 Gaps closed:** the former 3b (seller notice on reject/pause/remove), Slice 6 (order/payment notices) and Slice 7 (reporter/reported-party notices) TODOs now point to D2; the events are emitted and the consumer produces the notices. Source and status-doc TODO markers removed.
+- **Templates (all NOT FOR PRODUCTION, pending copy review; docs/16 §8 #6, §7 #3):** neutral copy only. `New bid on your auction` / `You were outbid` (auction), `You won an auction` / `Your auction closed` (auction result), `Order created`, `Order paid`, `Order shipped`, `Order ready for pickup`, `Listing update`, `Account update`, `Report outcome`, `Report resolved`. No template contains a reporter id, provider id, payment detail, or staff moderation reason (unit grep + runtime tests).
+
+**Operations / GraphQL:** `consumeOutbox`, `consumeNotifications`, `handleNotificationEvent`, `deliverPending`, `myNotifications`, `unreadCount`, `markNotificationRead`. Queries `myNotifications`, `unreadCount`; mutation `markNotificationRead`; type `Notification` (id, category, title, body, createdAt, readAt, resourceType, resourceId, link) — no `source_event_id`, delivery status, or other user's data. No query or mutation exposes delivery internals. All timestamps from the injected clock; no SQL clock functions or `Date.now()` in new source.
+
+**State diagram:** `docs-implementation/notifications-state-diagram.md` (event-to-category mapping, consumer flow, delivery retry flow).
+
+**Tests (API, Vitest):** `notification-mapping.test.ts` (every D2 event maps to the expected category/recipients, no recipient outside spec, template safety grep + runtime, placeholder category list), `source-guard-notifications.test.ts` (clock discipline, former TODO markers gone, D2 pointers present), `integration-notifications.test.ts` (consumer idempotency/failure, outbid notices, replay, auction close sold/unsold, listing moderation notices, order/payment/fulfilment notices, suspension notice, report-resolution notices, transactional preferences, sink retry cap and sent_at, owner scoping, read marking, unreadCount, Notification schema/runtime privacy).
+
+**Known limitations:** no real provider (docs/11 §6), no SMS or push, no marketing category, no real-time delivery (docs/03 §5), no UI/preferences screens (Slice 9). Copy is neutral placeholder text pending review (docs/16 §8 #6). Consumer has no dead-letter queue/operator visibility beyond failed delivery rows (docs/03 §6).
+
+**Workstream status:** #10 Notifications — **partial** (outbox consumer, in-app + console delivery). Slice 9 not started.

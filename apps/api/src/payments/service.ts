@@ -158,6 +158,12 @@ export async function handleWebhook(
       const order = await client.query(`SELECT * FROM orders WHERE id=$1`, [payment.order_id]);
       if ((order.rowCount ?? 0) > 0 && (order.rows[0] as OrderRow).status === "awaiting_payment") {
         await transitionOrder(client, order.rows[0] as OrderRow, "paid", null, "payment.succeeded", at);
+        // Slice 8 (D2): order transition to paid notifies the seller via the outbox.
+        await client.query(
+          `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+           VALUES ('order', $1, 'order.paid', $2::jsonb, $3)`,
+          [payment.order_id, JSON.stringify({ orderId: payment.order_id }), at]
+        );
       }
     } else if (eventType === "payment.failed" && payment.status === "created") {
       assertTransition(payment.status as PaymentStatus, "failed");
