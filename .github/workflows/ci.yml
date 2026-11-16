@@ -53,6 +53,9 @@ jobs:
       - name: Lint
         run: pnpm -r --if-present lint
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Migrate up (CI database)
         run: pnpm --filter @aliauction/api migrate:up
         env:

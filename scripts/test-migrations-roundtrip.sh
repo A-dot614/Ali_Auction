@@ -26,7 +26,6 @@ DB_PASSWORD="${MIGRATION_DB_PASSWORD:-aliauction}"
 DB_NAME="${MIGRATION_DB_NAME:-aliauction_migrate_test}"
 ADMIN_DB="${MIGRATION_ADMIN_DB:-postgres}"
 MIGRATIONS_DIR="${MIGRATIONS_DIR:-apps/api/migrations}"
-DOCKER_PG_CONTAINER="${MIGRATION_DOCKER_CONTAINER:-}"
 
 export PGPASSWORD="$DB_PASSWORD"
 export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
@@ -34,14 +33,8 @@ export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT
 if command -v psql >/dev/null 2>&1; then
   echo "[migrations] using psql from PATH: $(command -v psql)"
   run_psql() { local db="$1"; shift; psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$db" -v ON_ERROR_STOP=1 "$@"; }
-elif [[ -n "$DOCKER_PG_CONTAINER" ]]; then
-  echo "[migrations] using docker exec: ${DOCKER_PG_CONTAINER}"
-  run_psql() { local db="$1"; shift; docker exec -e PGPASSWORD="$DB_PASSWORD" "$DOCKER_PG_CONTAINER" psql -h localhost -p 5432 -U "$DB_USER" -d "$db" -v ON_ERROR_STOP=1 "$@"; }
-elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'aliauction-postgres'; then
-  echo "[migrations] using docker exec: aliauction-postgres"
-  run_psql() { local db="$1"; shift; docker exec -e PGPASSWORD="$DB_PASSWORD" aliauction-postgres psql -h localhost -p 5432 -U "$DB_USER" -d "$db" -v ON_ERROR_STOP=1 "$@"; }
 else
-  echo "[migrations] FAIL: psql not found and no docker postgres container available" >&2
+  echo "[migrations] FAIL: psql not found on PATH; install postgresql-client" >&2
   exit 1
 fi
 
