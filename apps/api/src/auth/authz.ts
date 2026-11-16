@@ -26,6 +26,10 @@ export function requireAuth(ctx: GraphQLContext): AppUser {
 
 export function requireVerified(ctx: GraphQLContext): AppUser {
   const user = requireAuth(ctx);
+  // Slice 7 (D8): suspended accounts are rejected by the shared protected-action gate.
+  if (user.status === "suspended") {
+    throw new Error("ACCOUNT_SUSPENDED: Account is suspended.");
+  }
   if (!user.email_verified_at) {
     // Stable error code for unverified users blocked from protected mutations.
     throw new Error("EMAIL_NOT_VERIFIED: Verify your email before performing this action.");

@@ -238,7 +238,11 @@ export async function authenticateSession(
   if ((res.rowCount ?? 0) === 0) return null;
   const row = res.rows[0];
   if (row.revoked_at || new Date(row.expires_at).getTime() < Date.now()) return null;
-  if (row.status === "suspended" || row.status === "closed") return null;
+  // Slice 7 (D8): keep suspended accounts authenticated so requireVerified can return
+  // the stable ACCOUNT_SUSPENDED code on protected mutations. Suspension revokes all
+  // sessions in the same transaction, so this path is reachable only via a still-valid
+  // session (e.g. a state change outside the suspension mutation).
+  if (row.status === "closed") return null;
 
   const roles = await getUserRoles(row.user_id);
   const user: AppUser = {

@@ -1,5 +1,5 @@
 import { config } from "../../config.js";
-import { requireAuth, type GraphQLContext } from "../../auth/authz.js";
+import { requireAuth, requireVerified, type GraphQLContext } from "../../auth/authz.js";
 import type { AppUser } from "../../auth/service.js";
 import {
   getMyOrders,
@@ -55,7 +55,8 @@ export const ordersResolvers = {
   },
   Mutation: {
     createCheckout: async (_: any, { input }: any, ctx: GraphQLContext) => {
-      const user = requireAuth(ctx);
+      // Slice 7 (D8): suspended accounts are rejected with ACCOUNT_SUSPENDED.
+      const user = requireVerified(ctx);
       return createCheckout(
         input.orderId,
         user.id,

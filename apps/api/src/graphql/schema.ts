@@ -15,6 +15,7 @@ import { sellerResolvers } from "./resolvers/seller.js";
 import { catalogueResolvers } from "./resolvers/catalogue.js";
 import { ordersResolvers } from "./resolvers/orders.js";
 import { auctionResolvers } from "./resolvers/auction.js";
+import { reportsResolvers } from "./resolvers/reports.js";
 
 const HealthType = new GraphQLObjectType({
   name: "Health",
@@ -598,6 +599,98 @@ const ListingDraftInput = new GraphQLInputObjectType({
   },
 });
 
+// Slice 7 - reports & moderation. Categories are NOT FOR PRODUCTION placeholders (docs/16 §7 #5).
+const ReportCategoryEnum = new GraphQLEnumType({
+  name: "ReportCategory",
+  description: "NOT FOR PRODUCTION placeholder categories. TODO(docs/16 §7 #5).",
+  values: {
+    prohibited_item: { value: "prohibited_item" },
+    counterfeit: { value: "counterfeit" },
+    misleading_listing: { value: "misleading_listing" },
+    harassment: { value: "harassment" },
+    spam: { value: "spam" },
+    other: { value: "other" },
+  },
+});
+
+const ReportTargetTypeEnum = new GraphQLEnumType({
+  name: "ReportTargetType",
+  values: {
+    listing: { value: "listing" },
+    user: { value: "user" },
+  },
+});
+
+const ReportStatusEnum = new GraphQLEnumType({
+  name: "ReportStatus",
+  values: {
+    open: { value: "open" },
+    actioned: { value: "actioned" },
+    dismissed: { value: "dismissed" },
+  },
+});
+
+const ReportDecisionEnum = new GraphQLEnumType({
+  name: "ReportDecision",
+  values: {
+    actioned: { value: "actioned" },
+    dismissed: { value: "dismissed" },
+  },
+});
+
+const ModerationActionEnum = new GraphQLEnumType({
+  name: "ModerationAction",
+  values: {
+    none: { value: "none" },
+    hide_listing: { value: "hide_listing" },
+    suspend_user: { value: "suspend_user" },
+  },
+});
+
+// Staff-only view. reporterUserId is never exposed by any public/reported-party type.
+const ReportStaffType = new GraphQLObjectType({
+  name: "ReportStaffType",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    reporterUserId: { type: new GraphQLNonNull(GraphQLID) },
+    targetType: { type: new GraphQLNonNull(ReportTargetTypeEnum) },
+    targetId: { type: new GraphQLNonNull(GraphQLID) },
+    category: { type: new GraphQLNonNull(ReportCategoryEnum) },
+    details: { type: GraphQLString },
+    status: { type: new GraphQLNonNull(ReportStatusEnum) },
+    resolutionReason: { type: GraphQLString },
+    resolvedByUserId: { type: GraphQLID },
+    resolvedAt: { type: GraphQLString },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const ReportConnection = new GraphQLObjectType({
+  name: "ReportConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(ReportStaffType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+// Minimal reporter-facing receipt: no reporter identity, no reported-party data.
+const ReportReceiptType = new GraphQLObjectType({
+  name: "ReportReceipt",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(ReportStatusEnum) },
+  },
+});
+
+const AccountStatusResultType = new GraphQLObjectType({
+  name: "AccountStatusResult",
+  fields: {
+    userId: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
 const QueryType = new GraphQLObjectType({
   name: "Query",
   fields: {
@@ -694,6 +787,16 @@ const QueryType = new GraphQLObjectType({
       type: AuctionType,
       args: { slug: { type: new GraphQLNonNull(GraphQLString) } },
       resolve: auctionResolvers.Query.auctionForListing,
+    },
+    pendingReports: {
+      type: new GraphQLNonNull(ReportConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: reportsResolvers.Query.pendingReports,
+    },
+    reportForStaff: {
+      type: new GraphQLNonNull(ReportStaffType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: reportsResolvers.Query.reportForStaff,
     },
   },
 });
@@ -841,6 +944,50 @@ const MutationType = new GraphQLObjectType({
       type: new GraphQLNonNull(PaymentType),
       args: { input: { type: new GraphQLNonNull(RefundInput) } },
       resolve: ordersResolvers.Mutation.refundPayment,
+    },
+    reportListing: {
+      type: new GraphQLNonNull(ReportReceiptType),
+      args: {
+        listingId: { type: new GraphQLNonNull(GraphQLID) },
+        category: { type: new GraphQLNonNull(ReportCategoryEnum) },
+        details: { type: GraphQLString },
+      },
+      resolve: reportsResolvers.Mutation.reportListing,
+    },
+    reportUser: {
+      type: new GraphQLNonNull(ReportReceiptType),
+      args: {
+        userId: { type: new GraphQLNonNull(GraphQLID) },
+        category: { type: new GraphQLNonNull(ReportCategoryEnum) },
+        details: { type: GraphQLString },
+      },
+      resolve: reportsResolvers.Mutation.reportUser,
+    },
+    resolveReport: {
+      type: new GraphQLNonNull(ReportStaffType),
+      args: {
+        reportId: { type: new GraphQLNonNull(GraphQLID) },
+        decision: { type: new GraphQLNonNull(ReportDecisionEnum) },
+        reason: { type: new GraphQLNonNull(GraphQLString) },
+        action: { type: new GraphQLNonNull(ModerationActionEnum) },
+      },
+      resolve: reportsResolvers.Mutation.resolveReport,
+    },
+    suspendUser: {
+      type: new GraphQLNonNull(AccountStatusResultType),
+      args: {
+        userId: { type: new GraphQLNonNull(GraphQLID) },
+        reason: { type: new GraphQLNonNull(GraphQLString) },
+      },
+      resolve: reportsResolvers.Mutation.suspendUser,
+    },
+    reinstateUser: {
+      type: new GraphQLNonNull(AccountStatusResultType),
+      args: {
+        userId: { type: new GraphQLNonNull(GraphQLID) },
+        reason: { type: new GraphQLNonNull(GraphQLString) },
+      },
+      resolve: reportsResolvers.Mutation.reinstateUser,
     },
   },
 });

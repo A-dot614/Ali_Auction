@@ -536,13 +536,18 @@ export async function rejectListing(listingId: string, reviewerUserId: string, r
   });
 }
 
-export async function pauseListing(listingId: string, reviewerUserId: string, reason: string | null): Promise<Listing> {
+export async function pauseListing(
+  listingId: string,
+  reviewerUserId: string,
+  reason: string | null,
+  client?: pg.PoolClient
+): Promise<Listing> {
   const trimmedReason = (reason || "").trim();
   if (!trimmedReason) {
     throw new Error("VALIDATION_ERROR: Reason is required for pause.");
   }
-  return withTransaction(async (client) => {
-    const { listing, sellerUserId } = await lockListingForModeration(client, listingId);
+  const run = async (tx: pg.PoolClient) => {
+    const { listing, sellerUserId } = await lockListingForModeration(tx, listingId);
     if (sellerUserId === reviewerUserId) {
       throw new Error("FORBIDDEN: A moderator cannot moderate a listing they own.");
     }
@@ -558,11 +563,11 @@ export async function pauseListing(listingId: string, reviewerUserId: string, re
           targetId: listingId,
           metadata: { before: status, after: "paused", attemptedAction: "pauseListing" },
         },
-        client
+        tx
       );
       throw err;
     }
-    const updated = await client.query(
+    const updated = await tx.query(
       `UPDATE listings SET status='paused', updated_at=now() WHERE id=$1 RETURNING *`,
       [listingId]
     );
@@ -575,10 +580,13 @@ export async function pauseListing(listingId: string, reviewerUserId: string, re
         reason: trimmedReason,
         metadata: { before: status, after: "paused", listingId },
       },
-      client
+      tx
     );
     return mapListing(updated.rows[0]);
-  });
+  };
+  // Slice 7: resolveReport(action=hide_listing) reuses this path inside its own transaction.
+  if (client) return run(client);
+  return withTransaction(run);
 }
 
 export async function resumeListing(listingId: string, reviewerUserId: string): Promise<Listing> {

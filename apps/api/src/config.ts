@@ -61,6 +61,14 @@ export const config = {
       buyerFeeBps: Number(env("BUYER_FEE_BPS", "800")),
     };
   },
+  // Moderation/report placeholders (Slice 7). All NOT FOR PRODUCTION.
+  // TODO(docs/16 §7 #5): prohibited/restricted item policy and report data limits are OPEN.
+  get moderation() {
+    return {
+      // Placeholder maximum report-details length; approved limit is OPEN (docs/16 §7 #5).
+      maxReportDetailsLength: Number(env("MAX_REPORT_DETAILS_LENGTH", "2000")),
+    };
+  },
   get fulfilment() {
     return {
       // No shipping rate decision exists yet; shipping fee stays 0 (docs/16 §6).
