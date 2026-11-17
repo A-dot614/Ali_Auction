@@ -15,6 +15,8 @@ export type GraphQLContext = {
   rotatedExpiresAt?: Date;
   // Test-only override; production leaves this unset so config.features keeps bidding closed.
   auctionConfig?: AuctionRuntimeConfig;
+  // Test-only clock override for the serverTime query; production uses the system clock.
+  serverClock?: () => Date;
 };
 
 export function requireAuth(ctx: GraphQLContext): AppUser {

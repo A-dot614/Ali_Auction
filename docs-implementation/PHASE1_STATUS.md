@@ -2,7 +2,7 @@
 
 **Roadmap source:** `docs/15-delivery-roadmap.md`  
 **Scope basis:** `docs/01-product-requirements-document.md`, `docs/02-epics-user-stories.md`  
-**Last updated:** 2026-11-16 (Slices 0–7 complete for their scope; Slice 8 notifications/outbox consumer/in-app+console delivery completed; stopped before Slice 9)
+**Last updated:** 2026-11-17 (Slices 0–8 complete for their scope; Slice 9 responsive web scaffold/PWA/security headers/real-time fallback completed; stopped before Slice 10)
 
 ## Phase 1 workstreams
 
@@ -18,7 +18,7 @@
 | 8 | Orders and basic fulfilment | Partial (Slice 6 manual fulfilment) | Slice 6 adds orders created from `auction.closed` outbox events, fee snapshots, participant-scoped order queries, manual shipping/pickup fulfilment and internal refunds. No carrier integrations, shipping rates or tax. |
 | 9 | Admin moderation and audit trail | Partial (Slice 7 reports/queue/suspension/audit) | `audit_logs` + `recordAudit`; auth event audit; admin-only `adminHealth`. Slice 7 adds user reports, a staff-only moderation queue, manual report resolution, user suspension/reinstatement via state machines, and one-audit-row-per-privileged-mutation coverage with an append-only guard. **No UI (Slice 9), no appeal workflow (docs/16 §7 #6), no notifications (Slice 8), no automated moderation (docs/16 §8 #3).** |
 | 10 | Notifications | Partial (Slice 8 outbox consumer + in-app/console) | Notification table, per-user preferences, delivery attempts and an idempotent outbox consumer are implemented. In-app and dev-console email sinks only. **No real email/SMS/push provider (docs/11 §6), no real-time delivery (docs/03 §5), no marketing category, no UI (Slice 9).** |
-| 11 | Responsive web/PWA | Started (scaffold) | Next.js scaffold remains; no identity UI flows wired yet. |
+| 11 | Responsive web/PWA | Partial (Slice 9 responsive scaffold + PWA + security headers) | Public/auth/buyer/seller routes, mobile-first Tailwind layout, screen states, server-offset auction countdown, bid status, manifest/service worker/offline page and security headers implemented. Real-time flag OFF with refetch fallback; no Socket.io gateway. **No admin screens (deferred), no visual design (docs/16 §8 #6), no real-time delivery (docs/03 §5), Lighthouse result recorded below.** |
 | 12 | Security, privacy, support and observability | In progress (foundation) | Env loading, secure cookie settings baseline, auth rate limiting, authz enforcement, audit logging for auth events, safe-by-default feature flags for live bidding/real-money. Pending: full threat model, CSRF strategy review, Redis-backed/distributed rate limits, structured logging/metrics/tracing/alerts, privacy workflows, support tooling, security/compliance reviews. |
 
 ## Step 1 — Scaffold verification (completed)
@@ -540,3 +540,31 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 **Known limitations:** no real provider (docs/11 §6), no SMS or push, no marketing category, no real-time delivery (docs/03 §5), no UI/preferences screens (Slice 9). Copy is neutral placeholder text pending review (docs/16 §8 #6). Consumer has no dead-letter queue/operator visibility beyond failed delivery rows (docs/03 §6).
 
 **Workstream status:** #10 Notifications — **partial** (outbox consumer, in-app + console delivery). Slice 9 not started.
+
+## Slice 9 — Responsive web, PWA, security headers, real-time fallback (workstream 11, partial)
+
+**Scope:** Phase 1 workstream 11. Scaffold-level public, auth, buyer and seller routes, mobile-first Tailwind layout, data-driven screen states, server-offset auction countdown, text-based bid status, PWA manifest/service worker/offline page, and security headers. **Not implemented:** Socket.io server/gateway or real-time delivery (docs/03 §5), native mobile app, admin/staff screens (deferred, docs/09), real email/payment providers, Elasticsearch, proxy/snipe/reserve, new API business rules, or visual design. `docs/16` and all applied migrations unchanged. Copy and visual design are placeholders pending review (docs/16 §8 #6); every placeholder string carries the comment `PLACEHOLDER COPY (docs/16 §8 #6)`.
+
+**Minimal API addition:** `serverTime: DateTime!` on the `Query` type (`apps/api/src/graphql/resolvers/system.ts`, `apps/api/src/graphql/schema.ts`), resolved from an injectable context clock (`serverClock` in `GraphQLContext`) and serialized as an ISO-8601 instant. No mutations changed; no business rules added. Integration test asserts the injected clock value.
+
+**Decisions (proposed placeholders):**
+- **D1 Routes:** implemented public/auth/buyer/seller routes in `apps/web/src/app`: `/`, `/categories/[slug]`, `/search`, `/listings/[slug]`, `/auth/{register,login,verify-email,forgot-password,reset-password}`, `/account`, `/buyer/bids`, `/buyer/orders`, `/buyer/orders/[orderId]`, `/buyer/notifications`, `/seller/onboarding`, `/seller/dashboard`, `/seller/listings`, `/seller/listings/new`, `/seller/listings/[listingId]/edit`, `/seller/orders`. **Admin routes `/admin/*` are DEFERRED** (docs/09: separate admin navigation, explicit role permissions, MFA) — no admin screens in this slice.
+- **D2 Screen states:** `apps/web/src/components/ScreenState.tsx` + `apps/web/src/lib/states.ts` provide loading, empty, error, permission-denied, stale and offline states; error copy is mapped from stable API codes (`apps/web/src/lib/errors.ts`), raw server text is never rendered.
+- **D3 Auction UI:** `apps/web/src/components/AuctionPanel.tsx` shows price, bid count, server-provided end time and a countdown computed as `endsAt - (clientNow + serverOffset)` (`apps/web/src/lib/countdown.ts`, one clock read). Bid form shows "Submitted, waiting for confirmation" until `accepted: true`; rejected bids map stable codes to neutral copy; bid history shows `bidderLabel` only.
+- **D4 Real-time flag:** `FEATURE_REALTIME_UI` (`NEXT_PUBLIC_FEATURE_REALTIME_UI`, default OFF) is a web config value, not a user toggle. OFF: refetch on focus, every 15 s (NOT FOR PRODUCTION placeholder) and after a bid. ON: no gateway exists, so it logs a TODO and uses the same refetch fallback (`apps/web/src/lib/realtime.ts`). Real-time delivery is docs/03 §5 and a later slice.
+- **D5 Auth UI:** `apps/web/src/components/AuthForm.tsx` calls existing register/login/verifyEmail/requestPasswordReset/resetPassword/resendVerification mutations with credentials included; the UI only reads `me` and never stores a token. Forgot/resend show a neutral response regardless of account existence (enumeration-safe). Tokens are entered in a labelled field, not placed in URLs.
+- **D6 Accessibility:** semantic landmarks, labelled controls, visible focus, 44 px touch targets, reduced-motion support, text-not-colour status and skip link. axe-core was added as a web devDependency; a full browser-based axe run is not part of node:test here, so an automated static check of landmarks/labels on the key pages is used (`apps/web/test/accessibility-static.test.mjs`) and the browser-based axe/Lighthouse result is recorded separately.
+- **D7 Responsive layout:** mobile-first Tailwind utilities plus custom CSS; bidding controls usable at 320 px; tables become stacked cards below `md`.
+- **D8 PWA:** `apps/web/public/manifest.webmanifest` (name AliAuction.ca, short_name AliAuction, start_url/scope `/`, standalone, placeholder colours/icons marked for design review). `apps/web/public/sw.js` caches only the shell, static build assets and public category/listing/search pages with a 5-minute NOT FOR PRODUCTION TTL; it never caches `/graphql`, credentialed/cookie responses, or `/auth`, `/account`, `/buyer`, `/seller`, `/admin`. Offline page at `/offline` shows neutral copy with no account data.
+- **D9 Security headers:** `apps/web/next.config.ts` exports `securityHeadersFor(env, origin)` — CSP (`default-src 'self'`, script/connect/img/style restricted, `frame-ancestors 'none'`), HSTS only in production, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, minimal `Permissions-Policy`. Applied to all routes via `headers()`. `script-src` includes `'unsafe-inline'` as a placeholder required by Next.js inline bootstrap scripts; a nonce-based CSP is pending review (docs/16 §8 #6).
+- **D10 Frontend privacy:** no analytics, no personal data in URLs/query strings, no sensitive values in forms' URLs, no browser logging of personal data. No secrets in `apps/web` source or bundle config (grep test).
+
+**State diagram:** `docs-implementation/web-pwa-state-diagram.md` (route map, auction bid state flow, real-time flag fallback, service worker caching rules).
+
+**Tests (web + API):** `apps/web/test/*`: countdown, bid status mapper, error code mapper, real-time flag, manifest, service worker, security headers, source greps (no token storage / secrets / countdown clock), accessibility static landmarks+labels; `apps/api/test/integration-server-time.test.ts`: injected-clock `serverTime`.
+
+**Lighthouse (measured locally against the built app, Chrome available):** homepage `/` — accessibility **100**, best-practices **96**, performance **86**; `/auth/login` accessibility **100**. Lighthouse 13 has no PWA category, so no PWA score is claimed; manifest/service-worker rules are covered by unit tests instead. The first run exposed a CSP issue (inline Next.js bootstrap scripts blocked, breaking hydration); CSP `script-src` now includes `'unsafe-inline'` as a documented placeholder until nonce-based CSP is implemented.
+
+**Known limitations:** no admin/staff screens (deferred, docs/09); no real-time gateway (docs/03 §5); no visual design/wireframes (docs/16 §8 #6); participant pages are scaffold-level with shared screen states rather than fully wired data; Lighthouse a11y/PWA scores reflect a scaffold, not production UI.
+
+**Workstream status:** #11 Responsive web/PWA — **partial**. Slice 10 not started.

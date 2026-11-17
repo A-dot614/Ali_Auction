@@ -1,68 +1,28 @@
-const workstreams = [
-  "Identity and account management",
-  "Seller profile and basic verification workflow",
-  "Categories and listing management",
-  "Timed auction engine",
-  "Manual bidding and approved proxy-bidding baseline",
-  "Search and browsing",
-  "Checkout and selected payment provider",
-  "Orders and basic fulfilment",
-  "Admin moderation and audit trail",
-  "Notifications",
-  "Responsive web/PWA",
-  "Security, privacy, support and observability",
-];
+import PageShell from "../components/PageShell";
 
-const foundations = [
-  "Monorepo scaffold: apps/web (Next.js), apps/api (Express+GraphQL), packages/shared",
-  "Local infra: PostgreSQL + Redis via Docker Compose",
-  "Starter DB bootstrap from docs/05-postgresql-starter-schema.sql.md",
-  "Environment template and CI skeleton",
-  "Implementation status tracker: docs-implementation/PHASE1_STATUS.md",
-];
-
+// PLACEHOLDER COPY (docs/16 §8 #6): homepage copy is pending copy/design review.
 export default function HomePage() {
   return (
-    <main>
-      <h1>AliAuction.ca</h1>
-      <p className="muted">
-        Phase 1 (MVP) foundation scaffolded from <code>/docs</code>. This is a
-        planning-aligned starting point, not a launch-ready marketplace.
-      </p>
-
+    <PageShell
+      title="AliAuction.ca"
+      description="Canadian C2C and B2C auction marketplace (Phase 1 scaffold)."
+    >
       <div className="grid">
         <section className="card">
-          <h2>Phase 1 workstreams</h2>
-          <ul>
-            {workstreams.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+          <h2>Browse</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+          <p className="muted">Discover listings by category or search.</p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         </section>
-
         <section className="card">
-          <h2>Foundation added in repo</h2>
-          <ul>
-            {foundations.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          <p className="muted">
-            API health: <code>GET http://localhost:4000/health</code> and GraphQL{" "}
-            <code>/graphql</code> once dependencies are installed.
-          </p>
+          <h2>Sell</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+          <p className="muted">Create a seller profile and list an item.</p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         </section>
       </div>
-
       <section className="card">
-        <h2>Important before building core flows</h2>
-        <ul>
-          <li>Resolve open decisions in <code>docs/16-assumptions-decisions-and-open-questions.md</code>.</li>
-          <li>Approve auction, fee, payment, and payout rules before settlement/charging logic.</li>
-          <li>Complete legal/privacy/payment/compliance review before real-money launch.</li>
-          <li>Treat starter schema as a draft; split into reviewed migrations.</li>
-        </ul>
+        <h2>Before launch</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+        <p className="muted">
+          Copy, visual design and open policy decisions are pending review (docs/16 §8 #6).
+        </p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
       </section>
-    </main>
+    </PageShell>
   );
 }

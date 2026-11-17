@@ -7,8 +7,10 @@ import {
   GraphQLList,
   GraphQLNonNull,
   GraphQLObjectType,
+  GraphQLScalarType,
   GraphQLSchema,
   GraphQLString,
+  Kind,
 } from "graphql";
 import { identityResolvers } from "./resolvers/identity.js";
 import { sellerResolvers } from "./resolvers/seller.js";
@@ -17,6 +19,22 @@ import { ordersResolvers } from "./resolvers/orders.js";
 import { auctionResolvers } from "./resolvers/auction.js";
 import { reportsResolvers } from "./resolvers/reports.js";
 import { notificationsResolvers } from "./resolvers/notifications.js";
+import { resolveServerTime } from "./resolvers/system.js";
+
+// Slice 9: ISO-8601 instant for the client countdown offset (no business rule).
+const DateTimeScalar = new GraphQLScalarType({
+  name: "DateTime",
+  serialize(value) {
+    if (value instanceof Date) return value.toISOString();
+    return new Date(String(value)).toISOString();
+  },
+  parseValue(value) {
+    return new Date(String(value));
+  },
+  parseLiteral(ast) {
+    return ast.kind === Kind.STRING ? new Date(ast.value) : null;
+  },
+});
 
 const HealthType = new GraphQLObjectType({
   name: "Health",
@@ -739,6 +757,10 @@ const NotificationConnection = new GraphQLObjectType({
 const QueryType = new GraphQLObjectType({
   name: "Query",
   fields: {
+    serverTime: {
+      type: new GraphQLNonNull(DateTimeScalar),
+      resolve: resolveServerTime,
+    },
     health: {
       type: HealthType,
       resolve: () => ({
