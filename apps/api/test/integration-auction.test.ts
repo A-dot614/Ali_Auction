@@ -174,8 +174,11 @@ describe("auction create (Slice 4a)", () => {
 
   it("seller creates an auction for their own published listing; a non-owner cannot (NOT_FOUND)", async () => {
     const { seller, listingId } = await makeSellerWithPublishedListing(`auc-own-${Date.now()}@example.com`);
-    const startsAt = new Date(FIXED_NOW.getTime() + 86_400_000);
-    const endsAt = new Date(FIXED_NOW.getTime() + 86_400_000 * 8);
+    // createAuction via GraphQL validates startsAt against the real server clock, so the
+    // schedule must be derived from runtime time; a fixed date becomes a time bomb.
+    const now = Date.now();
+    const startsAt = new Date(now + 86_400_000);
+    const endsAt = new Date(now + 86_400_000 * 8);
     const created = await gql({
       query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id listingId status currentPrice { minorUnits currency } startingPriceMinor endsAt } }`,
       variables: { input: { listingId, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), startingPriceMinor: 2500 } },
@@ -216,7 +219,7 @@ describe("auction create (Slice 4a)", () => {
     const { seller, listingId } = await makeSellerWithPublishedListing(`auc-sched-${Date.now()}@example.com`);
     const res = await gql({
       query: `mutation($input: CreateAuctionInput!){ createAuction(input:$input){ id } }`,
-      variables: { input: { listingId, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 86400000 * 8).toISOString(), startingPriceMinor: 2500 } },
+      variables: { input: { listingId, startsAt: "2020-01-01T00:00:00.000Z", endsAt: new Date(Date.now() + 86400000 * 8).toISOString(), startingPriceMinor: 2500 } },
       cookie: seller.cookie,
     });
     expect(res.body.errors?.[0]?.message || "").toContain("INVALID_SCHEDULE");
