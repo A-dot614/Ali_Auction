@@ -84,7 +84,25 @@ export const config = {
       shippingFeeMinor: Number(env("SHIPPING_FEE_MINOR", "0")),
     };
   },
+  // Observability/security placeholders (Slice 10). NOT FOR PRODUCTION.
+  get observability() {
+    return {
+      // Metrics bearer token. Required in production; tests inject a test token.
+      metricsToken: env("METRICS_TOKEN", ""),
+      // Placeholder dependency timeout, NOT FOR PRODUCTION (docs/13 §6).
+      healthTimeoutMs: Number(env("HEALTH_DEPENDENCY_TIMEOUT_MS", "2000")),
+      // Placeholder GraphQL depth cap, NOT FOR PRODUCTION (docs/16 does not cover it).
+      graphqlMaxDepth: Number(env("GRAPHQL_MAX_DEPTH", "10")),
+    };
+  },
 };
+
+/** Production requires an explicit metrics token; never fall back to a default secret. */
+export function assertMetricsTokenConfigured() {
+  if (config.nodeEnv === "production" && !config.observability.metricsToken) {
+    throw new Error("METRICS_TOKEN must be set in production.");
+  }
+}
 
 export function assertSafeFeatureFlags() {
   if (config.features.liveBiddingEnabled) {

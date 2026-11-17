@@ -16,14 +16,10 @@ import {
 } from "../../auth/service.js";
 import { requireAuth, requireRole, requireVerified, type GraphQLContext } from "../../auth/authz.js";
 
+import { sessionCookieOptions } from "../../auth/cookies.js";
+
 function cookieOptions(expiresAt?: Date) {
-  return {
-    httpOnly: true,
-    secure: config.session.secureCookies,
-    sameSite: "lax" as const,
-    path: "/",
-    ...(expiresAt ? { expires: expiresAt } : {}),
-  };
+  return sessionCookieOptions(config.session.secureCookies, expiresAt);
 }
 
 function setSessionCookie(ctx: GraphQLContext, token: string, expiresAt: Date) {

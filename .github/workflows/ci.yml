@@ -53,6 +53,12 @@ jobs:
       - name: Lint
         run: pnpm -r --if-present lint
 
+      - name: Dependency audit
+        run: npx -y pnpm@9.15.4 audit --prod --audit-level=high
+
+      - name: Secret scan
+        run: bash scripts/scan-secrets.sh
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 

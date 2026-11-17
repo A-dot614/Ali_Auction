@@ -45,7 +45,7 @@ run_psql "$ADMIN_DB" -c "CREATE DATABASE \"${DB_NAME}\";"
 
 run_migrate() { (cd apps/api && DATABASE_URL="$DATABASE_URL" npx node-pg-migrate -m migrations "$@"); }
 
-EXPECTED=(1700000000000_baseline 1700000000100_identity_access 1700000000200_identity_profile 1700000000300_seller_profile_verification 1700000000400_catalogue_listings_slice3a 1700000000500_auctions_bids_slice4a 1700000000600_listings_search_slice5 1700000000700_orders_payments_slice6 1700000000800_reports_moderation_slice7 1700000000900_notifications_slice8)
+EXPECTED=(1700000000000_baseline 1700000000100_identity_access 1700000000200_identity_profile 1700000000300_seller_profile_verification 1700000000400_catalogue_listings_slice3a 1700000000500_auctions_bids_slice4a 1700000000600_listings_search_slice5 1700000000700_orders_payments_slice6 1700000000800_reports_moderation_slice7 1700000000900_notifications_slice8 1700001000000_account_deletion_stub)
 
 fail() { echo "[migrations] FAIL: $*" >&2; exit 1; }
 
