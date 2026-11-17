@@ -84,8 +84,8 @@ while true; do
   if [[ "$applied_now_count" -eq 0 ]]; then
     break
   fi
-  if (( rolled_back >= 10 )); then
-    fail "rollback loop exceeded 10 iterations with ${applied_now_count} migration(s) still applied"
+  if (( rolled_back >= ${#EXPECTED[@]} )); then
+    fail "rollback loop exceeded ${#EXPECTED[@]} iterations with ${applied_now_count} migration(s) still applied"
   fi
   last_applied="$(printf '%s\n' "$applied_now" | tail -n 1)"
   expected_last="${EXPECTED[$(( ${#EXPECTED[@]} - 1 - rolled_back ))]}"
