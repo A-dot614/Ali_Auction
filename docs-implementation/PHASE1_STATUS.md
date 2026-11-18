@@ -664,6 +664,31 @@ No workstream is marked done for development or done for production at this clos
 
 ### Verdict
 
-**Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051, FR-072, FR-073.**
+**Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051.**
 
-FR-042 is NOT MET (fake payment adapter only; no hosted/tokenized collection). FR-044, FR-051, FR-072 and FR-073 are PARTIAL (provider chargebacks absent; flat estimate placeholder only; no evidence uploads; dispute policy/outcomes placeholders). The launch criteria in docs/01 §9 items 6–10 are also not met; see the deferral register. No production-readiness claim is made.
+FR-042 is NOT MET (fake payment adapter only; no hosted/tokenized collection). FR-044 and FR-051 are PARTIAL (provider chargebacks absent; flat estimate placeholder only). FR-072 and FR-073 are PARTIAL but their core workflows are implemented in Slice 12 (order disputes, assignment, resolution with audit); their remaining gaps are listed in the deferral register. The launch criteria in docs/01 §9 items 6–10 are also not met; see the deferral register. No production-readiness claim is made.
+
+## Reconciliation (final pass)
+
+**Corrections made (docs only; no product code, tests, migrations or docs/16 changed):**
+
+- `docs-implementation/phase1-traceability.md`: 10 file:line citations were wrong and were corrected from the source — FR-005 (`1700000000100_identity_access.js:17`, `:28-29`), FR-013 (`catalogue/service.ts:476`, `:517`, `:574`, `:635`, `:675` instead of `:453/:494/:551/:612/:652`), FR-014 (exact passing test names `a published listing matching the query is returned; a non-matching query returns NO_MATCHES` and `category slug with no published listings returns CATEGORY_EMPTY` instead of the informal "published hit / NO_MATCHES / CATEGORY_EMPTY cases"), FR-023 (`1700000000500_auctions_bids_slice4a.js:50`), FR-040 (`orders/service.ts:84` instead of `:80`), FR-041 (`orders/service.ts:200`), FR-045 (`orders/service.ts:163`), FR-050 (`orders/service.ts:299` instead of `:292`), FR-051 (`config.ts:97`, `orders/service.ts:216`), FR-060 (`catalogue/service.ts:355`, `graphql/resolvers/catalogue.ts:142`), FR-071 (`accounts/service.ts:91`) and FR-074 (`audit.ts:15`, `source-guard.test.ts:33`). All 35 cited test names were confirmed present and passing in the verbose output.
+- FR-072 and FR-073 are **partial**, not NOT MET: Slice 12 implemented `openDispute`, `disputesQueue`, `assignDispute`, `resolveDispute`, `closeDispute` and dispute messages with audit. Remaining gaps: no evidence uploads/object storage, no provider-level chargebacks, and placeholder reason codes / evidence window / outcomes (docs/16 §8 #4, §5 #8). The closeout verdict was corrected to stop listing them as unmet.
+- The only remaining NOT MET row, FR-042, has a cited code path (`payments/service.ts:60`) that is a **fake/sandbox adapter behind an OFF flag**, not a hosted/tokenized provider integration; it therefore stays NOT MET. No other NOT MET row exists to downgrade.
+- No unsupported "done"/"met" claim was found: every such word in this file is tied to a slice section with file/test evidence, or to a traceability row with a file:line and a passing test name.
+
+**Completion figures (estimates from the 31-row P0 list in `phase1-traceability.md`, not measured coverage):**
+
+| Status | Count |
+|---|---:|
+| met | 24 |
+| partial | 6 |
+| not met | 1 |
+| total P0 | 31 |
+
+- **Development completion** = (met + ½ × partial) / total = (24 + 6/2) / 31 = 27 / 31 ≈ **87.1%**.
+- **Production readiness** = items that additionally have a non-placeholder approved policy value, a passing external review, and a named owner sign-off = **0 / 31 = 0%**. No P0 item has all three; the approval log (docs/16 §10) is entirely Open, there is no external security review, and no named sign-off exists.
+
+Both numbers are rough estimates derived from the P0 traceability classification, not measured test or code coverage, and neither is a production-readiness claim.
+
+**Verdict:** **Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051.**
