@@ -145,6 +145,54 @@ describe("provider-neutral hosted checkout (Slice 13)", () => {
     expect(await paymentStatus(f.checkout.id)).toBe("captured");
   });
 
+  it("session completion webhook: payment is located only through the outbox session link", async () => {
+    const f = await makeFixture();
+    const at = new Date(Date.now());
+    const session = await startHostedCheckout(f.order.id, f.buyer.userId, randomUUID(), { now: () => at, moneyEnabled: true });
+    // No session column exists on payment_transactions: the link is the outbox event.
+    const cols = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name='payment_transactions'`
+    );
+    const names = cols.rows.map((r: any) => r.column_name as string);
+    expect(names.some((n) => /session/i.test(n))).toBe(false);
+    const link = await query(
+      `SELECT aggregate_id, payload FROM outbox_events
+       WHERE aggregate_type='payment' AND event_type='payment.hosted_session_started'
+         AND payload->>'sessionId' = $1`,
+      [session.sessionId]
+    );
+    expect(link.rows[0].aggregate_id).toBe(f.checkout.id);
+    // Completing with the session id resolves the payment through that outbox link.
+    await webhook(
+      { provider_event_id: randomUUID(), event_type: "payment.session_completed", session_id: session.sessionId },
+      new Date(at.getTime() + 60_000)
+    );
+    expect(await paymentStatus(f.checkout.id)).toBe("captured");
+    expect(await orderStatus(f.order.id)).toBe("paid");
+  });
+
+  it("session completion webhook: flag OFF returns REAL_MONEY_DISABLED and changes no state", async () => {
+    const f = await makeFixture();
+    const at = new Date(Date.now());
+    const session = await startHostedCheckout(f.order.id, f.buyer.userId, randomUUID(), { now: () => at, moneyEnabled: true });
+    const raw = JSON.stringify({
+      provider_event_id: randomUUID(),
+      event_type: "payment.session_completed",
+      session_id: session.sessionId,
+    });
+    await expect(
+      handleWebhook(
+        "fake",
+        raw,
+        { "x-fake-signature": createHmac("sha256", SECRET).update(raw).digest("hex") },
+        { now: () => at, moneyEnabled: false, webhookSecret: SECRET }
+      )
+    ).rejects.toThrow(/REAL_MONEY_DISABLED/);
+    expect(await webhookCount()).toBe(0);
+    expect(await paymentStatus(f.checkout.id)).toBe("created");
+    expect(await orderStatus(f.order.id)).toBe("awaiting_payment");
+  });
+
   it("session completion webhook: after the session expiry time, the completion event is recorded and changes no state", async () => {
     const f = await makeFixture();
     const at = new Date(Date.now());

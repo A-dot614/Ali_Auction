@@ -706,3 +706,12 @@ No P0 item is production-ready: none has a non-placeholder approved policy value
 **Tests (all passing):** the nine Slice 13 names in `apps/api/test/integration-hosted-checkout.test.ts`, covering neutral redirect/expiresAt, URL rejection, flag OFF, buyer-only and idempotency, verified session completion with dedupe, expiry, return-URL no-op, and the two source guards.
 
 **Workstream status:** #7 Checkout and selected payment provider — **partial** (neutral contract + fake implementation; no real provider). FR-042 unchanged: **NOT MET**.
+
+**Slice 13 verification pass (post-commit):**
+
+- **Completion-lookup finding:** `payment.session_completed` locates the payment by reading the `payment.hosted_session_started` outbox row (`apps/api/src/payments/service.ts:237-244`) via `payload->>'sessionId'`, then loading `payment_transactions` by that row's `aggregate_id`. The **sessionId is not recoverable from `payment_transactions` alone** — there is no session column. This is a design gap. No migration was added. Test added: `session completion webhook: payment is located only through the outbox session link` (asserts no session column exists and that completion succeeds via the outbox link).
+- **Known limitation (recorded, not fixed):** session reference lives in `outbox_events`; a dedicated column needs a new migration, which requires an owner decision on migration policy.
+- **Flag gating confirmed:** `handleWebhook` calls `requireMoneyEnabled` before any write; test added `session completion webhook: flag OFF returns REAL_MONEY_DISABLED and changes no state`. Existing `startHostedCheckout: flag OFF returns REAL_MONEY_DISABLED and writes nothing` covers the start path.
+- **Allowlist confirmed:** `HOSTED_URL_ALLOWLIST` and `isAllowedHostedUrl` are in `apps/api/src/payments/hostedSession.ts:11`, `:13`; test `hosted session: external or absolute returnUrl and cancelUrl return VALIDATION_ERROR and write nothing` passes.
+- **Manual grep (Step 2):** `grep -rniE 'stripe|paypal|authorize\.net|braintree|fetch\s*\(|axios|node-fetch|https?\.request' apps/api/src/payments` → no matches (exit 1). No provider name, SDK package name or network call exists in the payments module.
+- **Traceability row corrected:** Slice 13 supporting-evidence citations now carry exact file:line references; FR-042 status was not changed.
