@@ -69,6 +69,16 @@ export const config = {
       maxReportDetailsLength: Number(env("MAX_REPORT_DETAILS_LENGTH", "2000")),
     };
   },
+  // Dispute placeholders (Slice 12). All NOT FOR PRODUCTION.
+  // TODO(docs/16 §8 #4): approved dispute policy/evidence window and outcome list are OPEN.
+  get disputes() {
+    return {
+      // Placeholder description cap; approved limit is OPEN (docs/16 §8 #4).
+      maxDescriptionLength: Number(env("DISPUTE_MAX_DESCRIPTION_LENGTH", "2000")),
+      // Placeholder evidence window in days; approved window is OPEN (docs/16 §8 #4).
+      evidenceWindowDays: Number(env("DISPUTE_EVIDENCE_WINDOW_DAYS", "30")),
+    };
+  },
   // Notification placeholders (Slice 8). All NOT FOR PRODUCTION.
   // TODO(docs/16 §7 #3, §8 #6): categories/copy/provider remain OPEN.
   get notifications() {

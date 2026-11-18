@@ -197,6 +197,51 @@ export function mapEventToNotifications(message: OutboxMessage): NotificationSpe
           resourceId: userId,
         },
       ];
+    // Slice 12 (D10): dispute notices. Copy is a NOT FOR PRODUCTION placeholder
+    // pending review (docs/16 §8 #6); payloads carry no description or message body.
+    case "dispute.opened":
+      return [
+        {
+          recipient: "affected_user",
+          category: "order_update",
+          title: "Dispute opened",
+          body: "A dispute was opened on your order.",
+          resourceType: "order",
+          resourceId: orderId,
+        },
+      ];
+    case "dispute.message_posted":
+      return [
+        {
+          recipient: "affected_user",
+          category: "order_update",
+          title: "Dispute message",
+          body: "A new message was posted on your dispute.",
+          resourceType: "order",
+          resourceId: orderId,
+        },
+      ];
+    case "dispute.resolved": {
+      const outcome = typeof p.outcome === "string" ? p.outcome : "reviewed";
+      return [
+        {
+          recipient: "buyer",
+          category: "order_update",
+          title: "Dispute resolved",
+          body: `Your dispute outcome: ${outcome}.`,
+          resourceType: "order",
+          resourceId: orderId,
+        },
+        {
+          recipient: "seller",
+          category: "order_update",
+          title: "Dispute resolved",
+          body: `Your dispute outcome: ${outcome}.`,
+          resourceType: "order",
+          resourceId: orderId,
+        },
+      ];
+    }
     case "report.resolved": {
       const decision = p.decision === "actioned" || p.decision === "dismissed" ? p.decision : "reviewed";
       const specs: NotificationSpec[] = [

@@ -1,3 +1,4 @@
+import type pg from "pg";
 import { config } from "../config.js";
 import { query, withTransaction } from "../db.js";
 import { recordAudit } from "../audit.js";
@@ -184,7 +185,7 @@ export async function refundPayment(
   actor: Viewer,
   amountMinor: number,
   reason: string | null,
-  opts?: PaymentServiceOptions
+  opts?: PaymentServiceOptions & { client?: pg.PoolClient }
 ): Promise<PaymentView> {
   requireMoneyEnabled(opts);
   if (!actor.roles.some((r) => r === "admin" || r === "moderator" || r === "support")) {
@@ -197,7 +198,9 @@ export async function refundPayment(
   }
   const now = opts?.now ?? (() => new Date());
   const at = now();
-  return withTransaction(async (client) => {
+  // Slice 12 (D8): callers resolving a dispute may pass their client so the refund
+  // shares the dispute transaction; the existing money-flag guard still runs first.
+  const run = async (client: pg.PoolClient): Promise<PaymentView> => {
     const res = await client.query(`SELECT * FROM payment_transactions WHERE id=$1 FOR UPDATE`, [paymentId]);
     if ((res.rowCount ?? 0) === 0) throw new Error("NOT_FOUND: Payment not found.");
     const payment = res.rows[0];
@@ -231,5 +234,6 @@ export async function refundPayment(
     );
     const updated = await client.query(`SELECT * FROM payment_transactions WHERE id=$1`, [paymentId]);
     return mapPayment(updated.rows[0]);
-  });
+  };
+  return opts?.client ? run(opts.client) : withTransaction(run);
 }

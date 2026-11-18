@@ -17,6 +17,13 @@ export type GraphQLContext = {
   auctionConfig?: AuctionRuntimeConfig;
   // Test-only clock override for the serverTime query; production uses the system clock.
   serverClock?: () => Date;
+  // Test-only overrides for Slice 12 disputes; production leaves these unset.
+  disputeConfig?: {
+    clock?: () => Date;
+    moneyEnabled?: boolean;
+    maxDescriptionLength?: number;
+    evidenceWindowDays?: number;
+  };
 };
 
 export function requireAuth(ctx: GraphQLContext): AppUser {

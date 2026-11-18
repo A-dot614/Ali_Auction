@@ -10,6 +10,7 @@ import {
   GraphQLScalarType,
   GraphQLSchema,
   GraphQLString,
+  GraphQLUnionType,
   Kind,
 } from "graphql";
 import { identityResolvers } from "./resolvers/identity.js";
@@ -19,6 +20,7 @@ import { ordersResolvers } from "./resolvers/orders.js";
 import { auctionResolvers } from "./resolvers/auction.js";
 import { reportsResolvers } from "./resolvers/reports.js";
 import { notificationsResolvers } from "./resolvers/notifications.js";
+import { disputesResolvers } from "./resolvers/disputes.js";
 import { resolveServerTime } from "./resolvers/system.js";
 
 // Slice 9: ISO-8601 instant for the client countdown offset (no business rule).
@@ -754,6 +756,183 @@ const NotificationConnection = new GraphQLObjectType({
   },
 });
 
+// Slice 12 - order disputes. Reason codes, evidence window and outcomes are
+// NOT FOR PRODUCTION placeholders (TODO(docs/16 §8 #4, §5 #8)).
+const DisputeReasonCodeEnum = new GraphQLEnumType({
+  name: "DisputeReasonCode",
+  description: "NOT FOR PRODUCTION placeholder reason codes. TODO(docs/16 §8 #4).",
+  values: {
+    item_not_as_described: { value: "item_not_as_described" },
+    item_not_received: { value: "item_not_received" },
+    damaged: { value: "damaged" },
+    other: { value: "other" },
+  },
+});
+
+const DisputeStatusEnum = new GraphQLEnumType({
+  name: "DisputeStatus",
+  values: {
+    open: { value: "open" },
+    resolved: { value: "resolved" },
+    closed: { value: "closed" },
+  },
+});
+
+const DisputeOutcomeEnum = new GraphQLEnumType({
+  name: "DisputeOutcome",
+  description: "NOT FOR PRODUCTION placeholder outcomes. TODO(docs/16 §8 #4, §5 #8).",
+  values: {
+    no_action: { value: "no_action" },
+    refund_full: { value: "refund_full" },
+    refund_partial: { value: "refund_partial" },
+    order_cancelled: { value: "order_cancelled" },
+  },
+});
+
+const DisputeMessageRoleEnum = new GraphQLEnumType({
+  name: "DisputeMessageRole",
+  values: {
+    buyer: { value: "buyer" },
+    seller: { value: "seller" },
+    staff: { value: "staff" },
+  },
+});
+
+// D5: participant messages never expose internal_only or an author user id.
+const DisputeMessageType = new GraphQLObjectType({
+  name: "DisputeMessage",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    authorRole: { type: new GraphQLNonNull(DisputeMessageRoleEnum) },
+    body: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const DisputeStaffMessageType = new GraphQLObjectType({
+  name: "DisputeStaffMessage",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    authorRole: { type: new GraphQLNonNull(DisputeMessageRoleEnum) },
+    authorUserId: { type: new GraphQLNonNull(GraphQLID) },
+    internalOnly: { type: new GraphQLNonNull(GraphQLBoolean) },
+    body: { type: new GraphQLNonNull(GraphQLString) },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const DisputeMessageResultType = new GraphQLUnionType({
+  name: "DisputeMessageResult",
+  types: [DisputeMessageType, DisputeStaffMessageType],
+  resolveType(value: any) {
+    return value?.authorUserId ? "DisputeStaffMessage" : "DisputeMessage";
+  },
+});
+
+const DisputeType = new GraphQLObjectType({
+  name: "Dispute",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    reasonCode: { type: new GraphQLNonNull(DisputeReasonCodeEnum) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    status: { type: new GraphQLNonNull(DisputeStatusEnum) },
+    outcome: { type: DisputeOutcomeEnum },
+    resolutionReason: { type: GraphQLString },
+    resolvedAt: { type: GraphQLString },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+    messages: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(DisputeMessageType))) },
+  },
+});
+
+// D6: finance sees only financial fields - no description, messages or staff user ids.
+const DisputeFinanceType = new GraphQLObjectType({
+  name: "DisputeFinanceType",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    status: { type: new GraphQLNonNull(DisputeStatusEnum) },
+    orderTotalMinor: { type: new GraphQLNonNull(GraphQLString) },
+    refundedAmountMinor: { type: new GraphQLNonNull(GraphQLString) },
+    paymentStatus: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
+const DisputeStaffType = new GraphQLObjectType({
+  name: "DisputeStaffType",
+  fields: {
+    id: { type: new GraphQLNonNull(GraphQLID) },
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    openedByUserId: { type: new GraphQLNonNull(GraphQLID) },
+    reasonCode: { type: new GraphQLNonNull(DisputeReasonCodeEnum) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    status: { type: new GraphQLNonNull(DisputeStatusEnum) },
+    assignedToUserId: { type: GraphQLID },
+    outcome: { type: DisputeOutcomeEnum },
+    resolutionReason: { type: GraphQLString },
+    resolvedByUserId: { type: GraphQLID },
+    resolvedAt: { type: GraphQLString },
+    createdAt: { type: new GraphQLNonNull(GraphQLString) },
+    updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+    messages: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(DisputeStaffMessageType))) },
+    financial: { type: new GraphQLNonNull(DisputeFinanceType) },
+  },
+});
+
+const DisputeStaffResultType = new GraphQLUnionType({
+  name: "DisputeStaffResult",
+  types: [DisputeStaffType, DisputeFinanceType],
+  resolveType(value: any) {
+    return value?.__typename === "DisputeFinanceType" ? "DisputeFinanceType" : "DisputeStaffType";
+  },
+});
+
+const DisputeConnection = new GraphQLObjectType({
+  name: "DisputeConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(DisputeType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+const DisputeStaffConnection = new GraphQLObjectType({
+  name: "DisputeStaffConnection",
+  fields: {
+    items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(DisputeStaffResultType))) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+const OpenDisputeInput = new GraphQLInputObjectType({
+  name: "OpenDisputeInput",
+  fields: {
+    orderId: { type: new GraphQLNonNull(GraphQLID) },
+    reasonCode: { type: new GraphQLNonNull(DisputeReasonCodeEnum) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    requestId: { type: new GraphQLNonNull(GraphQLID) },
+  },
+});
+
+const PostDisputeMessageInput = new GraphQLInputObjectType({
+  name: "PostDisputeMessageInput",
+  fields: {
+    disputeId: { type: new GraphQLNonNull(GraphQLID) },
+    body: { type: new GraphQLNonNull(GraphQLString) },
+    internalOnly: { type: GraphQLBoolean },
+  },
+});
+
+const ResolveDisputeInput = new GraphQLInputObjectType({
+  name: "ResolveDisputeInput",
+  fields: {
+    disputeId: { type: new GraphQLNonNull(GraphQLID) },
+    outcome: { type: new GraphQLNonNull(DisputeOutcomeEnum) },
+    reason: { type: new GraphQLNonNull(GraphQLString) },
+    amountMinor: { type: GraphQLString },
+  },
+});
+
 const QueryType = new GraphQLObjectType({
   name: "Query",
   fields: {
@@ -877,6 +1056,26 @@ const QueryType = new GraphQLObjectType({
     unreadCount: {
       type: new GraphQLNonNull(GraphQLInt),
       resolve: notificationsResolvers.Query.unreadCount,
+    },
+    myDisputes: {
+      type: new GraphQLNonNull(DisputeConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: disputesResolvers.Query.myDisputes,
+    },
+    dispute: {
+      type: new GraphQLNonNull(DisputeType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: disputesResolvers.Query.dispute,
+    },
+    disputesQueue: {
+      type: new GraphQLNonNull(DisputeStaffConnection),
+      args: { first: { type: GraphQLInt }, after: { type: GraphQLString } },
+      resolve: disputesResolvers.Query.disputesQueue,
+    },
+    disputeForStaff: {
+      type: new GraphQLNonNull(DisputeStaffResultType),
+      args: { id: { type: new GraphQLNonNull(GraphQLID) } },
+      resolve: disputesResolvers.Query.disputeForStaff,
     },
   },
 });
@@ -1073,6 +1272,37 @@ const MutationType = new GraphQLObjectType({
       type: new GraphQLNonNull(NotificationType),
       args: { id: { type: new GraphQLNonNull(GraphQLID) } },
       resolve: notificationsResolvers.Mutation.markNotificationRead,
+    },
+    openDispute: {
+      type: new GraphQLNonNull(DisputeType),
+      args: { input: { type: new GraphQLNonNull(OpenDisputeInput) } },
+      resolve: disputesResolvers.Mutation.openDispute,
+    },
+    postDisputeMessage: {
+      type: new GraphQLNonNull(DisputeMessageResultType),
+      args: { input: { type: new GraphQLNonNull(PostDisputeMessageInput) } },
+      resolve: disputesResolvers.Mutation.postDisputeMessage,
+    },
+    assignDispute: {
+      type: new GraphQLNonNull(DisputeStaffType),
+      args: {
+        disputeId: { type: new GraphQLNonNull(GraphQLID) },
+        staffUserId: { type: new GraphQLNonNull(GraphQLID) },
+      },
+      resolve: disputesResolvers.Mutation.assignDispute,
+    },
+    resolveDispute: {
+      type: new GraphQLNonNull(DisputeStaffType),
+      args: { input: { type: new GraphQLNonNull(ResolveDisputeInput) } },
+      resolve: disputesResolvers.Mutation.resolveDispute,
+    },
+    closeDispute: {
+      type: new GraphQLNonNull(DisputeStaffType),
+      args: {
+        disputeId: { type: new GraphQLNonNull(GraphQLID) },
+        reason: { type: new GraphQLNonNull(GraphQLString) },
+      },
+      resolve: disputesResolvers.Mutation.closeDispute,
     },
   },
 });
