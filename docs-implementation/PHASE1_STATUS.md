@@ -605,7 +605,7 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 
 **Scope:** closes the buildable part of FR-072 (support request / dispute tied to an order) and FR-073 (staff review and resolution with audit). No evidence uploads/object storage, no provider-level chargebacks (FR-044 stays open), no real payment providers, no notifications beyond existing outbox events, no new UI, and no change to auction, bidding or fee rules. `docs/16` and all applied migrations (`1700000000000`–`1700001000000`) are unchanged.
 
-**FR status:** FR-072 — **partial** (participant dispute creation and messages exist; no evidence attachments and no separate support-request workflow). FR-073 — **partial** (staff queue, assignment, resolution and audit exist; policy/outcomes are placeholders and provider chargebacks are absent). FR-074 — extended with dispute audit events.
+**FR status:** FR-072 — **partial** (participant dispute creation and messages exist; no evidence attachments/object storage and no separate support-request workflow — docs/16 §8 #4, docs/13). FR-073 — **partial** (staff queue, assignment, resolution and audit exist; reason codes, outcomes and evidence window are placeholders — docs/16 §8 #4). FR-044 — **partial** (internal refunds/failures only; provider-level chargebacks and negative balances absent — docs/16 §5 #8). FR-051 — **partial** (flat placeholder estimate only, no carrier rates — docs/16 §6 #1–#6). FR-074 — extended with dispute audit events.
 
 **Migration (new, applied after `1700001000000`):** `apps/api/migrations/1700001100000_disputes_slice12.js` — `disputes`, `dispute_messages`, `dispute_requests`; enums for reason code/status/outcome/message role; partial unique index on `(order_id) WHERE status='open'`; queue index `(status, created_at, id)`; CHECK constraints via createTable options; working down migration. Roundtrip expected list updated with `1700001100000` only.
 
@@ -664,16 +664,16 @@ No workstream is marked done for development or done for production at this clos
 
 ### Verdict
 
-**Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051.**
+**Phase 1 not complete for development. Unmet P0 items: FR-042.**
 
-FR-042 is NOT MET (fake payment adapter only; no hosted/tokenized collection). FR-044 and FR-051 are PARTIAL (provider chargebacks absent; flat estimate placeholder only). FR-072 and FR-073 are PARTIAL but their core workflows are implemented in Slice 12 (order disputes, assignment, resolution with audit); their remaining gaps are listed in the deferral register. The launch criteria in docs/01 §9 items 6–10 are also not met; see the deferral register. No production-readiness claim is made.
+FR-042 is the only NOT MET row (fake payment adapter only; no hosted/tokenized collection). FR-044 and FR-051 are PARTIAL (provider chargebacks absent; flat estimate placeholder only), and FR-072 and FR-073 are PARTIAL (core dispute workflows implemented in Slice 12; evidence uploads and approved policy/outcomes missing). Because each has a cited partial implementation, none of these four is in the unmet list. The launch criteria in docs/01 §9 items 6–10 are also not met; see the deferral register. No production-readiness claim is made.
 
 ## Reconciliation (final pass)
 
 **Corrections made (docs only; no product code, tests, migrations or docs/16 changed):**
 
 - `docs-implementation/phase1-traceability.md`: 12 rows had wrong or incomplete citations and were corrected from the source — FR-005 (`1700000000100_identity_access.js:17`, `:28-29`), FR-013 (`catalogue/service.ts:476`, `:517`, `:574`, `:635`, `:675` instead of `:453/:494/:551/:612/:652`), FR-014 (exact passing test names `a published listing matching the query is returned; a non-matching query returns NO_MATCHES` and `category slug with no published listings returns CATEGORY_EMPTY` instead of the informal "published hit / NO_MATCHES / CATEGORY_EMPTY cases"), FR-023 (`1700000000500_auctions_bids_slice4a.js:50`), FR-040 (`orders/service.ts:84` instead of `:80`), FR-041 (`orders/service.ts:200`), FR-045 (`orders/service.ts:163`), FR-050 (`orders/service.ts:299` instead of `:292`), FR-051 (`config.ts:97`, `orders/service.ts:216`), FR-060 (`catalogue/service.ts:355`, `graphql/resolvers/catalogue.ts:142`), FR-071 (`accounts/service.ts:91`) and FR-074 (`audit.ts:15`, `source-guard.test.ts:33`). All 35 cited test names were confirmed present and passing in the verbose output.
-- FR-072 and FR-073 are **partial**, not NOT MET: Slice 12 implemented `openDispute`, `disputesQueue`, `assignDispute`, `resolveDispute`, `closeDispute` and dispute messages with audit. Remaining gaps: no evidence uploads/object storage, no provider-level chargebacks, and placeholder reason codes / evidence window / outcomes (docs/16 §8 #4, §5 #8). The closeout verdict was corrected to stop listing them as unmet.
+- FR-072 and FR-073 are **partial**, not NOT MET: Slice 12 implemented `openDispute`, `disputesQueue`, `assignDispute`, `resolveDispute`, `closeDispute` and dispute messages with audit. FR-072 gaps: no evidence uploads/object storage and no separate support-request workflow (docs/16 §8 #4; docs/13). FR-073 gaps: reason codes, outcomes and evidence window are placeholders (docs/16 §8 #4); refund/chargeback policy remains OPEN (docs/16 §5 #8) — that last gap belongs to FR-044, not to FR-073. The closeout verdict was corrected to stop listing either as unmet.
 - The only remaining NOT MET row, FR-042, has a cited code path (`payments/service.ts:60`) that is a **fake/sandbox adapter behind an OFF flag**, not a hosted/tokenized provider integration; it therefore stays NOT MET. No other NOT MET row exists to downgrade.
 - No unsupported "done"/"met" claim was found: every such word in this file is tied to a slice section with file/test evidence, or to a traceability row with a file:line and a passing test name.
 
@@ -686,9 +686,8 @@ FR-042 is NOT MET (fake payment adapter only; no hosted/tokenized collection). F
 | not met | 1 |
 | total P0 | 31 |
 
-- **Development completion** = (met + ½ × partial) / total = (24 + 6/2) / 31 = 27 / 31 ≈ **87.1%**.
-- **Production readiness** = items that additionally have a non-placeholder approved policy value, a passing external review, and a named owner sign-off = **0 / 31 = 0%**. No P0 item has all three; the approval log (docs/16 §10) is entirely Open, there is no external security review, and no named sign-off exists.
+**24 of 31 P0 requirements met with evidence; 6 partial; 1 not met; 0 production-ready.**
 
-Both numbers are rough estimates derived from the P0 traceability classification, not measured test or code coverage, and neither is a production-readiness claim.
+No P0 item is production-ready: none has a non-placeholder approved policy value, a passing external review and a named owner sign-off together. The approval log (docs/16 §10) is entirely Open, there is no external security review, and no named sign-off exists. These counts are estimates derived from the P0 traceability classification, not measured test or code coverage, and they are not a production-readiness claim.
 
-**Verdict:** **Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051.**
+**Verdict:** **Phase 1 not complete for development. Unmet P0 items: FR-042.**
