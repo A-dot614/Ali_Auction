@@ -691,3 +691,18 @@ FR-042 is the only NOT MET row (fake payment adapter only; no hosted/tokenized c
 No P0 item is production-ready: none has a non-placeholder approved policy value, a passing external review and a named owner sign-off together. The approval log (docs/16 §10) is entirely Open, there is no external security review, and no named sign-off exists. These counts are estimates derived from the P0 traceability classification, not measured test or code coverage, and they are not a production-readiness claim.
 
 **Verdict:** **Phase 1 not complete for development. Unmet P0 items: FR-042.**
+
+## Slice 13 — Provider-neutral hosted-checkout contract (fake adapter only)
+
+**Scope:** added a provider-neutral hosted-session contract (`apps/api/src/payments/hostedSession.ts`, `apps/api/src/payments/fakeProvider.ts`), a service operation `startHostedCheckout` and a neutral `payment.session_completed` webhook event (`apps/api/src/payments/service.ts`). **FR-042 stays NOT MET**: this slice adds only the neutral contract plus its fake implementation; no hosted real-money collection and no real provider exists. `FEATURE_REAL_MONEY_PAYMENTS_ENABLED` remains OFF by default and is asserted OFF at production startup. No provider name, SDK or network call was added; no applied migration was changed and no new migration was added.
+
+**Decisions (all proposed placeholders, NOT FOR PRODUCTION):**
+- **Hosted session:** `createHostedSession({ paymentId, amountMinor, currency, returnUrl, cancelUrl, at, ttlMinutes })` returns `{ sessionId, redirectUrl, expiresAt }`. `returnUrl`/`cancelUrl` must be allowlisted relative paths (`/checkout/return`, `/checkout/cancel`); anything else → `VALIDATION_ERROR` with no writes. `expiresAt` derives from the injected clock plus `config.payments.hostedSessionTtlMinutes` (default 30) — **TODO docs/16 §5 #5** (capture timing OPEN). The fake `redirectUrl` is an internal test route; nothing leaves the process.
+- **startHostedCheckout:** buyer-only, flag-guarded (`REAL_MONEY_DISABLED` when OFF, no writes), reuses the `createCheckout` payment row, stores the session reference against it (outbox event, no schema change) and is idempotent on `requestId`.
+- **Webhook:** `payment.session_completed` is handled by the existing verified/signature-checked webhook path; payment status moves `created → captured` through the payment state machine and the order `awaiting_payment → paid` through the order state machine, and only within the placeholder session window. Duplicate delivery is deduped by `(provider, provider_event_id)`. Browser redirects/return URLs never change state.
+
+**Link to docs/16:** §5 #1 (which provider is the MVP primary processor) and §5 #2 (account type/charge model) remain OPEN; the contract exists so a real adapter can be added later without changing order or payment logic. See the FR-042 entry in `docs-implementation/phase1-decision-pack.md` — the provider choice is still pending, with no recommendation made.
+
+**Tests (all passing):** the nine Slice 13 names in `apps/api/test/integration-hosted-checkout.test.ts`, covering neutral redirect/expiresAt, URL rejection, flag OFF, buyer-only and idempotency, verified session completion with dedupe, expiry, return-URL no-op, and the two source guards.
+
+**Workstream status:** #7 Checkout and selected payment provider — **partial** (neutral contract + fake implementation; no real provider). FR-042 unchanged: **NOT MET**.

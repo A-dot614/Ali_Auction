@@ -53,6 +53,8 @@ export const config = {
     return {
       // Fake-provider sandbox secret only; tests inject their own value. NOT FOR PRODUCTION.
       fakeWebhookSecret: env("FAKE_PAYMENT_WEBHOOK_SECRET", "fake-webhook-secret-placeholder-not-for-production"),
+      // Placeholder hosted-session lifetime. NOT FOR PRODUCTION; TODO docs/16 §5 #5 (capture timing OPEN).
+      hostedSessionTtlMinutes: Number(env("PAYMENTS_HOSTED_SESSION_TTL_MINUTES", "30")),
     };
   },
   get fees() {

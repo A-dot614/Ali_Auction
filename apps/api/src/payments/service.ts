@@ -100,6 +100,98 @@ export async function createCheckout(
   return mapPayment(inserted.rows[0]);
 }
 
+/** Slice 13: provider-neutral hosted session view. No provider-specific fields. */
+export type HostedCheckoutView = { sessionId: string; redirectUrl: string; expiresAt: string };
+
+function sessionPayloadView(payload: any): HostedCheckoutView {
+  return {
+    sessionId: String(payload.sessionId),
+    redirectUrl: String(payload.redirectUrl),
+    expiresAt: String(payload.expiresAt),
+  };
+}
+
+/**
+ * Slice 13: start a hosted checkout session on the existing checkout payment row.
+ * The session reference is stored against that row via its outbox event (no schema change).
+ * Idempotent on requestId; browser return URLs never change state.
+ */
+export async function startHostedCheckout(
+  orderId: string,
+  buyerUserId: string,
+  requestId: string,
+  opts?: PaymentServiceOptions & { returnUrl?: string; cancelUrl?: string }
+): Promise<HostedCheckoutView> {
+  requireMoneyEnabled(opts);
+  const now = opts?.now ?? (() => new Date());
+  const at = now();
+  const provider = providerOf(opts);
+  const prior = await query(
+    `SELECT payload FROM outbox_events
+     WHERE aggregate_type='payment' AND event_type='payment.hosted_session_started'
+       AND payload->>'requestId' = $1 LIMIT 1`,
+    [requestId]
+  );
+  if ((prior.rowCount ?? 0) > 0) return sessionPayloadView(prior.rows[0].payload);
+
+  return withTransaction(async (client) => {
+    const again = await client.query(
+      `SELECT payload FROM outbox_events
+       WHERE aggregate_type='payment' AND event_type='payment.hosted_session_started'
+         AND payload->>'requestId' = $1 LIMIT 1`,
+      [requestId]
+    );
+    if ((again.rowCount ?? 0) > 0) return sessionPayloadView(again.rows[0].payload);
+
+    const orderRes = await client.query(`SELECT * FROM orders WHERE id = $1`, [orderId]);
+    if ((orderRes.rowCount ?? 0) === 0 || (orderRes.rows[0] as OrderRow).buyer_user_id !== buyerUserId) {
+      throw new Error("NOT_FOUND: Order not found.");
+    }
+    const paymentRes = await client.query(
+      `SELECT * FROM payment_transactions WHERE order_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [orderId]
+    );
+    if ((paymentRes.rowCount ?? 0) === 0) throw new Error("NOT_FOUND: Payment not found.");
+    const payment = paymentRes.rows[0];
+    if (payment.status !== "created") throw new Error("VALIDATION_ERROR: Payment is not open for a hosted session.");
+
+    const session = provider.createHostedSession({
+      paymentId: payment.id,
+      amountMinor: Number(payment.amount_minor),
+      currency: payment.currency,
+      returnUrl: opts?.returnUrl ?? "/checkout/return",
+      cancelUrl: opts?.cancelUrl ?? "/checkout/cancel",
+      at,
+      ttlMinutes: config.payments.hostedSessionTtlMinutes,
+    });
+    const payload = {
+      requestId,
+      paymentId: payment.id,
+      orderId,
+      sessionId: session.sessionId,
+      redirectUrl: session.redirectUrl,
+      expiresAt: session.expiresAt.toISOString(),
+    };
+    await client.query(
+      `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)
+       VALUES ('payment', $1, 'payment.hosted_session_started', $2::jsonb, $3)`,
+      [payment.id, JSON.stringify(payload), at]
+    );
+    await recordAudit(
+      {
+        actorUserId: buyerUserId,
+        action: "payment.hosted_session_started",
+        targetType: "payment_transaction",
+        targetId: payment.id,
+        metadata: { requestId, sessionId: session.sessionId },
+        createdAt: at,
+      },
+      client
+    );
+    return sessionPayloadView(payload);
+  });
+}
+
 export type WebhookResult = { outcome: "processed" | "duplicate" | "unknown"; eventType?: string };
 
 /** D5/D6: verify signature first, dedupe, then process in one transaction. */
@@ -127,7 +219,10 @@ export async function handleWebhook(
   const eventId = String(body?.provider_event_id ?? "");
   const eventType = String(body?.event_type ?? "");
   const providerPaymentId = String(body?.provider_payment_id ?? "");
-  if (!eventId || !providerPaymentId) throw new Error("VALIDATION_ERROR: Missing provider event/payment id.");
+  const sessionId = String(body?.session_id ?? "");
+  if (!eventId || (!providerPaymentId && !sessionId)) {
+    throw new Error("VALIDATION_ERROR: Missing provider event/payment id.");
+  }
 
   return withTransaction(async (client) => {
     const recorded = await client.query(
@@ -137,16 +232,36 @@ export async function handleWebhook(
     );
     if ((recorded.rowCount ?? 0) === 0) return { outcome: "duplicate", eventType };
 
-    const paymentRes = await client.query(
-      `SELECT * FROM payment_transactions WHERE provider=$1 AND provider_payment_id=$2`,
-      [providerName, providerPaymentId]
-    );
+    let paymentRes;
+    let sessionRow: any = null;
+    if (sessionId) {
+      const sessionRes = await client.query(
+        `SELECT aggregate_id, payload FROM outbox_events
+         WHERE aggregate_type='payment' AND event_type='payment.hosted_session_started'
+           AND payload->>'sessionId' = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+        [sessionId]
+      );
+      sessionRow = sessionRes.rows[0] ?? null;
+      paymentRes = sessionRow
+        ? await client.query(`SELECT * FROM payment_transactions WHERE id = $1`, [sessionRow.aggregate_id])
+        : { rowCount: 0, rows: [] };
+    } else {
+      paymentRes = await client.query(
+        `SELECT * FROM payment_transactions WHERE provider=$1 AND provider_payment_id=$2`,
+        [providerName, providerPaymentId]
+      );
+    }
     if ((paymentRes.rowCount ?? 0) === 0) {
       // Unknown payment: event is stored but left unprocessed (processed_at stays NULL).
       return { outcome: "unknown", eventType };
     }
     const payment = paymentRes.rows[0];
-    if (eventType === "payment.succeeded" && payment.status === "created") {
+    // Session completion is only valid before the placeholder session expiry; the event
+    // is still recorded/processed, but state must not change after expiry.
+    const withinSession =
+      eventType !== "payment.session_completed" ||
+      (sessionRow != null && at.getTime() <= new Date(String(sessionRow.payload.expiresAt)).getTime());
+    if ((eventType === "payment.succeeded" || eventType === "payment.session_completed") && payment.status === "created" && withinSession) {
       assertTransition(payment.status as PaymentStatus, "captured");
       await client.query(
         `UPDATE payment_transactions SET status='captured', captured_amount_minor=$2, updated_at=$3 WHERE id=$1`,
@@ -158,7 +273,7 @@ export async function handleWebhook(
       );
       const order = await client.query(`SELECT * FROM orders WHERE id=$1`, [payment.order_id]);
       if ((order.rowCount ?? 0) > 0 && (order.rows[0] as OrderRow).status === "awaiting_payment") {
-        await transitionOrder(client, order.rows[0] as OrderRow, "paid", null, "payment.succeeded", at);
+        await transitionOrder(client, order.rows[0] as OrderRow, "paid", null, eventType, at);
         // Slice 8 (D2): order transition to paid notifies the seller via the outbox.
         await client.query(
           `INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload, created_at)

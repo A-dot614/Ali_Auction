@@ -194,6 +194,7 @@ primary block with cross-references in the other block indexes.
 
 ### FR-042 — Hosted/tokenized payment collection (NOT MET)
 - Refs: docs/01 §6 FR-042; docs/16 §5 #1–#10; docs/10 §5. Blocks: real money (also public launch).
+- Note (Slice 13): a provider-neutral hosted-session contract and a fake-only implementation now exist (`apps/api/src/payments/hostedSession.ts`, `fakeProvider.ts`, and `startHostedCheckout` in `apps/api/src/payments/service.ts`). No real provider is named, chosen or integrated; FR-042 stays NOT MET and this note does not mark any decision. The provider choice questions below are still pending.
 - Questions only — no provider is chosen or recommended in this pack:
   - Which provider is the MVP primary processor?
   - Which account type and charge model apply?
