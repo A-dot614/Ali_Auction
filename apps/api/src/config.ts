@@ -92,6 +92,9 @@ export const config = {
     return {
       // No shipping rate decision exists yet; shipping fee stays 0 (docs/16 §6).
       shippingFeeMinor: Number(env("SHIPPING_FEE_MINOR", "0")),
+      // NOT FOR PRODUCTION placeholder flat estimate. No address/carrier rate computation.
+      // TODO(docs/16 §6 #1-#3, §6 #6): shipping obligation, payer, provinces and carrier API are OPEN.
+      flatShippingEstimateMinor: Number(env("FULFILMENT_FLAT_ESTIMATE_MINOR", "0")),
     };
   },
   // Observability/security placeholders (Slice 10). NOT FOR PRODUCTION.

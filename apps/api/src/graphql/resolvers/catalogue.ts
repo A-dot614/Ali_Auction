@@ -11,6 +11,7 @@ import {
   getPublicListingBySlug,
   listActiveCategories,
   myListings,
+  getSellerListingOutcome,
   pendingListingReviews,
   rejectListing,
   resumeListing,
@@ -134,6 +135,13 @@ export const catalogueResolvers = {
     removeListing: async (_: any, { id, reason }: any, ctx: GraphQLContext) => {
       const reviewer = requireStaffReviewer(ctx);
       return serializeListing(await removeListing(id, reviewer.id, reason));
+    },
+  },
+  // A2 (FR-060): read-only, owner-scoped auction status + final price on the seller's listing.
+  Listing: {
+    auctionOutcome: async (parent: Listing, _args: any, ctx: GraphQLContext) => {
+      const user = requireAuth(ctx);
+      return getSellerListingOutcome(parent.id, user.id);
     },
   },
 };

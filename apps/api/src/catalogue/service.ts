@@ -349,6 +349,29 @@ export async function submitListingForReview(userId: string, listingId: string):
   });
 }
 
+/** A2 (FR-060): read-only auction outcome for the seller's own listing; owner-only. */
+export type SellerAuctionOutcome = { status: string; finalPriceMinor: string };
+
+export async function getSellerListingOutcome(listingId: string, userId: string): Promise<SellerAuctionOutcome | null> {
+  const owner = await query(
+    `SELECT l.id FROM listings l JOIN seller_profiles sp ON sp.id = l.seller_profile_id
+     WHERE l.id = $1 AND sp.user_id = $2`,
+    [listingId, userId]
+  );
+  if ((owner.rowCount ?? 0) === 0) throw new Error("NOT_FOUND: Listing not found.");
+  const res = await query(
+    `SELECT a.status, a.current_price_minor, b.amount_minor AS winning_amount
+     FROM auctions a LEFT JOIN bids b ON b.id = a.winning_bid_id
+     WHERE a.listing_id = $1`,
+    [listingId]
+  );
+  if ((res.rowCount ?? 0) === 0) return null;
+  const row = res.rows[0];
+  // No sale has a final price of 0; closed_sold uses the winning bid amount.
+  const final = row.status === "closed_sold" && row.winning_amount != null ? row.winning_amount : 0;
+  return { status: row.status, finalPriceMinor: String(final) };
+}
+
 export async function myListings(userId: string, opts: { status?: string | null; first?: number; after?: string | null }) {
   const sellerProfileId = await getApprovedSellerProfileIdForUser(userId);
   const limit = Math.min(Math.max(opts.first || 20, 1), 100);

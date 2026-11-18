@@ -632,3 +632,38 @@ References: `docs/16-assumptions-decisions-and-open-questions.md` (and related d
 **State diagram:** `docs-implementation/disputes-state-diagram.md`.
 
 **Workstream status:** #9 Admin moderation and audit trail — **partial** (dev-complete for disputes; no evidence uploads, no provider chargebacks, placeholder policy). No production claim.
+
+## Phase 1 closeout (final session)
+
+**A1 — FR-051 fulfilment estimate (done, placeholder only).** Added `config.fulfilment.flatShippingEstimateMinor` (`FULFILMENT_FLAT_ESTIMATE_MINOR`, default 0), labelled NOT FOR PRODUCTION with TODO docs/16 §6 #1–#3 and #6. Added `estimatedShippingMinor` and `estimateBasis = PLACEHOLDER_FLAT` to the participant-scoped order view (`apps/api/src/orders/service.ts` `mapOrderView`; `apps/api/src/graphql/schema.ts` `EstimateBasisEnum` / `OrderType`). No address- or carrier-derived computation; `total_minor` is unchanged. Tests: `estimate is returned to the buyer`, `NOT_FOUND for a non-participant`, `estimate is never added to total_minor` (`apps/api/test/integration-fulfilment-estimate.test.ts`).
+
+**A2 — FR-060 seller outcomes (done).** Added read-only `getSellerListingOutcome` (`apps/api/src/catalogue/service.ts`) and `Listing.auctionOutcome { status, finalPriceMinor }` on the seller's own listing view (`apps/api/src/graphql/resolvers/catalogue.ts`, `apps/api/src/graphql/schema.ts` `SellerAuctionOutcomeType`), enforcing the same ownership rule; `closed_unsold` reports final price 0. Tests: `seller sees own closed_sold outcome; another seller gets NOT_FOUND`, `seller sees own closed_unsold outcome with final price` (`apps/api/test/integration-seller-outcome.test.ts`).
+
+**A3 — traceability (done).** `docs-implementation/phase1-traceability.md`: one row per P0 FR-001…FR-074 with implementation file:line, evidence test name, and status (met / partial / NOT MET). Rows that cannot be cited are marked NOT MET. Built from the code, not memory.
+
+**A4 — deferral register (done).** `docs-implementation/phase1-deferral-register.md`: every NOT MET or PARTIAL item with what is missing, the docs/16 or docs/01 §9 reference, the deciding owner role, and the earliest slice after the decision.
+
+### Final 12 workstream statuses
+
+| # | Workstream | Status | Slices | Open items |
+|---|---|---|---|---|
+| 1 | Identity and account management | partial | 0,1,3 | FR-004 email change/re-verification; MFA (P1); production email provider |
+| 2 | Seller profile and basic verification | partial | 2 | document storage, thresholds, SLAs, appeals (docs/16 §7) |
+| 3 | Categories and listing management | partial | 3a,3b | approved taxonomy, moderation UI/policy, automated moderation |
+| 4 | Timed auction engine | partial | 4a,4b | snipe, reserve, production scheduler; flag OFF for all users |
+| 5 | Manual bidding / proxy baseline | partial | 4a,4b | proxy + tie-breaking; flag OFF for all users |
+| 6 | Search and browsing | partial | 5 | UI/wireframes, approved config/attributes |
+| 7 | Checkout and selected payment provider | partial | 6 | real hosted provider, capture, payouts, escrow; flag OFF |
+| 8 | Orders and basic fulfilment | partial | 6, A1 | real rates/carriers/tax; estimate is a flat placeholder |
+| 9 | Admin moderation and audit trail | partial | 3b,7,12 | evidence uploads, provider chargebacks, approved dispute policy, appeals |
+| 10 | Notifications | partial | 8 | real email/SMS/push, real-time delivery, preferences UI |
+| 11 | Responsive web/PWA | partial | 9 | admin screens, real-time gateway, visual design |
+| 12 | Security, privacy, support and observability | partial | 10 | external review, backup/restore drill, alert routes/on-call, retention, legal approvals |
+
+No workstream is marked done for development or done for production at this closeout.
+
+### Verdict
+
+**Phase 1 not complete for development. Unmet P0 items: FR-042, FR-044, FR-051, FR-072, FR-073.**
+
+FR-042 is NOT MET (fake payment adapter only; no hosted/tokenized collection). FR-044, FR-051, FR-072 and FR-073 are PARTIAL (provider chargebacks absent; flat estimate placeholder only; no evidence uploads; dispute policy/outcomes placeholders). The launch criteria in docs/01 §9 items 6–10 are also not met; see the deferral register. No production-readiness claim is made.

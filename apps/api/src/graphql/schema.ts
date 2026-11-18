@@ -187,6 +187,15 @@ const CategoryType = new GraphQLObjectType({
   },
 });
 
+// A2 (FR-060): seller-only read-only auction outcome (status + final price only).
+const SellerAuctionOutcomeType = new GraphQLObjectType({
+  name: "SellerAuctionOutcome",
+  fields: {
+    status: { type: new GraphQLNonNull(GraphQLString) },
+    finalPriceMinor: { type: new GraphQLNonNull(GraphQLString) },
+  },
+});
+
 const ListingType = new GraphQLObjectType({
   name: "Listing",
   fields: {
@@ -207,6 +216,8 @@ const ListingType = new GraphQLObjectType({
     publishedAt: { type: GraphQLString },
     createdAt: { type: new GraphQLNonNull(GraphQLString) },
     updatedAt: { type: new GraphQLNonNull(GraphQLString) },
+    // A2 (FR-060): owner-scoped; null when the listing has no auction.
+    auctionOutcome: { type: SellerAuctionOutcomeType, resolve: catalogueResolvers.Listing.auctionOutcome },
   },
 });
 
@@ -326,6 +337,13 @@ const ShipmentType = new GraphQLObjectType({
 });
 
 // Participant-only order type: no provider IDs, webhook payloads, staff notes or other-party user IDs.
+// A1 (FR-051): NOT FOR PRODUCTION placeholder estimate basis (TODO docs/16 §6 #1-#3, #6).
+const EstimateBasisEnum = new GraphQLEnumType({
+  name: "EstimateBasis",
+  description: "NOT FOR PRODUCTION placeholder estimate basis. TODO(docs/16 §6).",
+  values: { PLACEHOLDER_FLAT: { value: "PLACEHOLDER_FLAT" } },
+});
+
 const OrderType = new GraphQLObjectType({
   name: "Order",
   fields: {
@@ -339,6 +357,9 @@ const OrderType = new GraphQLObjectType({
     updatedAt: { type: new GraphQLNonNull(GraphQLString) },
     shippingAddressSnapshot: { type: GraphQLString },
     shipments: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(ShipmentType))) },
+    // A1 (FR-051): display-only estimate; never part of totalMinor.
+    estimatedShippingMinor: { type: new GraphQLNonNull(GraphQLString) },
+    estimateBasis: { type: new GraphQLNonNull(EstimateBasisEnum) },
   },
 });
 

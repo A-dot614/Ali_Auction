@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { config } from "../config.js";
 import { query, withTransaction } from "../db.js";
 import { assertTransition, type OrderStatus } from "./orderStateMachine.js";
 import { calculateFeeMinor } from "./fee.js";
@@ -42,6 +43,9 @@ export type OrderView = {
   updatedAt: string;
   shippingAddressSnapshot?: unknown | null;
   shipments: Array<{ method: string; carrier: string | null; trackingNumber: string | null }>;
+  // A1 (FR-051): display-only placeholder estimate; never added to totalMinor.
+  estimatedShippingMinor: string;
+  estimateBasis: "PLACEHOLDER_FLAT";
 };
 
 type Viewer = { id: string; roles: string[] };
@@ -208,6 +212,9 @@ async function mapOrderView(row: OrderRow, relation: "buyer" | "seller" | "staff
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
     shipments: shipments.rows.map((s: any) => ({ method: s.method, carrier: s.carrier, trackingNumber: s.tracking_number })),
+    // NOT FOR PRODUCTION: flat placeholder, no address/carrier computation (docs/16 §6).
+    estimatedShippingMinor: String(config.fulfilment.flatShippingEstimateMinor),
+    estimateBasis: "PLACEHOLDER_FLAT",
   };
   // Address is only returned to buyer/seller (docs/10 §5); never in public/staff views.
   if (relation === "buyer" || relation === "seller") view.shippingAddressSnapshot = row.shipping_address_snapshot ?? null;
