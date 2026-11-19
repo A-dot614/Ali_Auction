@@ -43,6 +43,8 @@ names the owner role who must decide and the earliest slice in which the work co
 | §10 | All approvals (MVP scope, auction rules, fee model, payment architecture, shipping, privacy/legal, cloud architecture, UI/UX) remain Open | docs/16 §10 | product owner | pre-launch |
 | Support-refund permission | Support-role refund permission differs from docs/09 baseline; deciding role: product owner/finance; needs a decision-log row. | docs/09 §3; docs/16 §5 #8 | product owner / finance | pre-launch |
 
+FR-021 recorded decision (2026-11-19): option A — keep live bidding flag OFF; see `docs-implementation/decision-log.md`. FR-021 remains partial; no P0 status change.
+
 ## Slice 14 — partial P0 gap classification
 
 Each remaining gap below is **POLICY-DEPENDENT**: closing it requires an owner decision, not a code-only fix. No code was changed for these items. The deciding Decision ID refers to the entry in `docs-implementation/phase1-decision-pack.md`.

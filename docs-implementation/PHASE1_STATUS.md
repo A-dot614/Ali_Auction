@@ -745,3 +745,12 @@ Owner decisions were neither made nor inferred; no decision-log row, approval, l
 7. **Decision-log cross-check:** every one of the **35** entries in `docs-implementation/phase1-decision-pack.md` has a matching row in `docs-implementation/decision-log.md` (35/35, no gaps). No row was filled or changed.
 
 P0 status is unchanged: **24 met / 6 partial / 1 not met / 0 production-ready**; FR-042 remains NOT MET. This section adds no production-readiness claim.
+
+## Owner decisions recorded
+
+One decision-log row is now recorded. No P0 status or count is changed by this section.
+
+- **FR-021 — Eligible buyer bids while open (flag OFF for all users):** option A — "Keep flag OFF — cost: no user can bid; risk: MVP bidding requirement stays partial." Live bidding flag stays OFF. Decided 2026-11-19. Source: `docs-implementation/decision-log.md`.
+- Counts from `docs-implementation/decision-log.md`: 35 rows total — **1 decided / 34 pending**. By owner role: product owner 1 decided / 17 pending; finance 0 decided / 9 pending; engineering lead 0 decided / 3 pending; operations 0 decided / 3 pending; counsel 0 decided / 2 pending.
+
+FR-021 remains partial. Live bidding stays OFF until the auction-rule decisions in §3 are made.
