@@ -65,6 +65,9 @@ export const config = {
       // code must refuse to construct a real adapter while this is unset (decision-log FR-042).
       // No provider name, SDK or network client is implied by this key.
       adapterKind: env("PAYMENTS_PROVIDER_ADAPTER_KIND", ""),
+      // Chargeback/negative-balance accounting treatment is a finance decision (FR-044).
+      // Required input with NO default; no rule is inferred or hard-coded.
+      chargebackTreatment: env("PAYMENTS_CHARGEBACK_TREATMENT", ""),
     };
   },
   get fees() {
