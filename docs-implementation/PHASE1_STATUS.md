@@ -754,3 +754,19 @@ One decision-log row is now recorded. No P0 status or count is changed by this s
 - Counts from `docs-implementation/decision-log.md`: 35 rows total — **1 decided / 34 pending**. By owner role: product owner 1 decided / 17 pending; finance 0 decided / 9 pending; engineering lead 0 decided / 3 pending; operations 0 decided / 3 pending; counsel 0 decided / 2 pending.
 
 FR-021 remains partial. Live bidding stays OFF until the auction-rule decisions in §3 are made.
+
+## Remaining work classification
+
+Read-only classification from `docs-implementation/phase1-traceability.md` and this status document. P0 counts are unchanged: **24 met / 6 partial / 1 not met / 0 production-ready**. No item in this table was started.
+
+| Item | Status | Classification | Decision ID (`docs-implementation/decision-log.md`) |
+|---|---|---|---|
+| FR-004 profile / contact management | partial | blocked | FR-004 — Email change / re-verification (product owner) |
+| FR-021 eligible buyer bids while open | partial | blocked | §3 #1–#9 and §3 #14 auction-rule decisions (product owner); the recorded FR-021 option A keeps the flag OFF |
+| FR-042 hosted/tokenized payment collection | NOT MET | blocked | FR-042 — Hosted/tokenized payment collection (NOT MET) (engineering lead) |
+| FR-044 refunds/failures/chargebacks recorded | partial | blocked | FR-044 — Provider-level chargebacks / disputes / negative balances (finance) |
+| FR-051 fulfilment options and estimates | partial | blocked | FR-051 — Real shipping rates and estimates (operations) |
+| FR-072 support request / dispute tied to order | partial | blocked | FR-072 — Evidence uploads / separate support-request workflow (product owner) |
+| FR-073 staff dispute review/resolution + audit | partial | blocked | FR-073 — Approved dispute outcomes and evidence window (product owner) |
+
+Every gap above is policy-dependent (Slice 14 classification in `docs-implementation/phase1-deferral-register.md`), not a code-only change. No P0 status or count was changed by this section.
