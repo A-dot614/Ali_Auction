@@ -21,6 +21,7 @@ import {
   type RateLimitConfig,
 } from "./middleware/rateLimit.js";
 import { handleWebhook } from "./payments/service.js";
+import { staffReviewPlaceholder } from "./disputes/decisionIndependent.js";
 import { query } from "./db.js";
 import { createLogger, type LogSink } from "./logging/logger.js";
 import { attachRequestId, requestLogging } from "./middleware/requestContext.js";
@@ -101,6 +102,11 @@ export function createApp(opts: CreateAppOptions = {}) {
 
   app.get("/health/live", (_req, res) => {
     res.status(200).json(liveness());
+  });
+
+  // Decision-independent staff-review placeholder. Returns no dispute data.
+  app.get("/admin/disputes/review-placeholder", (_req, res) => {
+    res.status(200).json(staffReviewPlaceholder());
   });
 
   const healthDeps: ReadinessDeps = {

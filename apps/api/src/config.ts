@@ -23,6 +23,9 @@ export const config = {
       realMoneyPaymentsEnabled: env("FEATURE_REAL_MONEY_PAYMENTS_ENABLED", "false") === "true",
       // Decision-dependent real-rate shipping (decision-log FR-051). Default OFF.
       realShippingRatesEnabled: env("FEATURE_REAL_SHIPPING_RATES_ENABLED", "false") === "true",
+      // Dispute evidence / approved-outcome capabilities (decision-log FR-072, FR-073).
+      disputeEvidenceUploadsEnabled: env("FEATURE_DISPUTE_EVIDENCE_UPLOADS_ENABLED", "false") === "true",
+      approvedDisputeOutcomesEnabled: env("FEATURE_APPROVED_DISPUTE_OUTCOMES_ENABLED", "false") === "true",
     };
   },
   get session() {
@@ -94,6 +97,11 @@ export const config = {
       maxDescriptionLength: Number(env("DISPUTE_MAX_DESCRIPTION_LENGTH", "2000")),
       // Placeholder evidence window in days; approved window is OPEN (docs/16 §8 #4).
       evidenceWindowDays: Number(env("DISPUTE_EVIDENCE_WINDOW_DAYS", "30")),
+      // Approved policy inputs have NO defaults (decision-log FR-072, FR-073).
+      approvedOutcomes: env("DISPUTE_APPROVED_OUTCOMES", ""),
+      approvedReasonCodes: env("DISPUTE_APPROVED_REASON_CODES", ""),
+      approvedEvidenceWindowDays: env("DISPUTE_APPROVED_EVIDENCE_WINDOW_DAYS", ""),
+      evidenceStorageKind: env("DISPUTE_EVIDENCE_STORAGE_KIND", ""),
     };
   },
   // Notification placeholders (Slice 8). All NOT FOR PRODUCTION.
@@ -154,6 +162,16 @@ export function assertSafeFeatureFlags() {
   if (config.features.realShippingRatesEnabled) {
     throw new Error(
       "FEATURE_REAL_SHIPPING_RATES_ENABLED must remain false: shipping-rate decision not made."
+    );
+  }
+  if (config.features.disputeEvidenceUploadsEnabled) {
+    throw new Error(
+      "FEATURE_DISPUTE_EVIDENCE_UPLOADS_ENABLED must remain false: evidence/storage decision not made."
+    );
+  }
+  if (config.features.approvedDisputeOutcomesEnabled) {
+    throw new Error(
+      "FEATURE_APPROVED_DISPUTE_OUTCOMES_ENABLED must remain false: dispute policy decision not made."
     );
   }
 }
