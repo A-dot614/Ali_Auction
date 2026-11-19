@@ -2,7 +2,7 @@
 
 | Decision ID | Question | Owner role | Decision made | Options chosen | Decided by | Date | Evidence or reference |
 |---|---|---|---|---|---|---|---|
-| FR-021 — Eligible buyer bids while open (flag OFF for all users) | Under which approved auction rules may live bidding be enabled for real users? | product owner |  |  |  |  |  |
+| FR-021 — Eligible buyer bids while open (flag OFF for all users) | Under which approved auction rules may live bidding be enabled for real users? | product owner | Keep flag OFF — cost: no user can bid; risk: MVP bidding requirement stays partial. | A | Bilal | 2026-11-19 | owner-decision-forms.md, supplied in session |
 | FR-025 — Reserve and snipe-protection enforcement | Are reserves and snipe protection in MVP, and what are the trigger, extension cap and bidder visibility? | product owner |  |  |  |  |  |
 | §3 #1 — Auction format | Are auctions English ascending only? | product owner |  |  |  |  |  |
 | §3 #2 — Bid input semantics | Does the bid field mean the next bid amount or a confidential maximum? | product owner |  |  |  |  |  |
