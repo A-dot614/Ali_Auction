@@ -5,6 +5,7 @@ import { recordAudit } from "../audit.js";
 import { fakePaymentProvider, type PaymentProvider } from "./fakeProvider.js";
 import { assertTransition, type PaymentStatus } from "./paymentStateMachine.js";
 import { loadOrder, transitionOrder, type OrderRow } from "../orders/service.js";
+import { assertRealRateModeAllowed } from "../shipping/rateQuote.js";
 
 /**
  * Checkout, webhook processing and refunds (Slice 6, sandbox only).
@@ -60,10 +61,16 @@ function mapPayment(row: any): PaymentView {
 export async function createCheckout(
   orderId: string,
   buyerUserId: string,
-  input: { acceptedTotalMinor: number | string; fulfilmentChoice: string; requestId: string },
+  input: {
+    acceptedTotalMinor: number | string;
+    fulfilmentChoice: string;
+    requestId: string;
+    shippingMode?: "flat" | "real_rates";
+  },
   opts?: PaymentServiceOptions
 ): Promise<PaymentView> {
   requireMoneyEnabled(opts);
+  assertRealRateModeAllowed(input.shippingMode);
   const now = opts?.now ?? (() => new Date());
   const at = now();
   const provider = providerOf(opts);
@@ -120,9 +127,14 @@ export async function startHostedCheckout(
   orderId: string,
   buyerUserId: string,
   requestId: string,
-  opts?: PaymentServiceOptions & { returnUrl?: string; cancelUrl?: string }
+  opts?: PaymentServiceOptions & {
+    returnUrl?: string;
+    cancelUrl?: string;
+    shippingMode?: "flat" | "real_rates";
+  }
 ): Promise<HostedCheckoutView> {
   requireMoneyEnabled(opts);
+  assertRealRateModeAllowed(opts?.shippingMode);
   const now = opts?.now ?? (() => new Date());
   const at = now();
   const provider = providerOf(opts);

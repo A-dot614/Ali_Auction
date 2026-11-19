@@ -21,6 +21,8 @@ export const config = {
     return {
       liveBiddingEnabled: env("FEATURE_LIVE_BIDDING_ENABLED", "false") === "true",
       realMoneyPaymentsEnabled: env("FEATURE_REAL_MONEY_PAYMENTS_ENABLED", "false") === "true",
+      // Decision-dependent real-rate shipping (decision-log FR-051). Default OFF.
+      realShippingRatesEnabled: env("FEATURE_REAL_SHIPPING_RATES_ENABLED", "false") === "true",
     };
   },
   get session() {
@@ -110,6 +112,12 @@ export const config = {
       // NOT FOR PRODUCTION placeholder flat estimate. No address/carrier rate computation.
       // TODO(docs/16 §6 #1-#3, §6 #6): shipping obligation, payer, provinces and carrier API are OPEN.
       flatShippingEstimateMinor: Number(env("FULFILMENT_FLAT_ESTIMATE_MINOR", "0")),
+      // Real-rate mode inputs are decision-dependent (decision-log FR-051). NO defaults:
+      // checkout refuses real-rate mode while any of these is unset.
+      rateCurrency: env("SHIPPING_RATE_CURRENCY", ""),
+      rateCarriers: env("SHIPPING_CARRIERS", ""),
+      rateScope: env("SHIPPING_SCOPE", ""),
+      rateAmountMinor: env("SHIPPING_RATE_AMOUNT_MINOR", ""),
     };
   },
   // Observability/security placeholders (Slice 10). NOT FOR PRODUCTION.
@@ -141,6 +149,11 @@ export function assertSafeFeatureFlags() {
   if (config.features.realMoneyPaymentsEnabled) {
     throw new Error(
       "FEATURE_REAL_MONEY_PAYMENTS_ENABLED must remain false: real-money/escrow/payout flows not permitted."
+    );
+  }
+  if (config.features.realShippingRatesEnabled) {
+    throw new Error(
+      "FEATURE_REAL_SHIPPING_RATES_ENABLED must remain false: shipping-rate decision not made."
     );
   }
 }
