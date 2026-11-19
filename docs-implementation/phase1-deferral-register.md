@@ -41,3 +41,17 @@ names the owner role who must decide and the earliest slice in which the work co
 | §8 #1–#10 | Approved categories, moderation model, support hours/languages, dispute policy and evidence window, SLAs, RPO/RTO, rollout, launch traffic, analytics tools, wireframes/design | docs/16 §8 | product owner | pre-launch |
 | §9 | Source financial/TOC/leadership inconsistencies | docs/16 §9 | finance | pre-launch |
 | §10 | All approvals (MVP scope, auction rules, fee model, payment architecture, shipping, privacy/legal, cloud architecture, UI/UX) remain Open | docs/16 §10 | product owner | pre-launch |
+| Support-refund permission | Support-role refund permission differs from docs/09 baseline; deciding role: product owner/finance; needs a decision-log row. | docs/09 §3; docs/16 §5 #8 | product owner / finance | pre-launch |
+
+## Slice 14 — partial P0 gap classification
+
+Each remaining gap below is **POLICY-DEPENDENT**: closing it requires an owner decision, not a code-only fix. No code was changed for these items. The deciding Decision ID refers to the entry in `docs-implementation/phase1-decision-pack.md`.
+
+| P0 item | Gap type | Remaining gap | Deciding Decision ID | Owner role |
+|---|---|---|---|---|
+| FR-004 | POLICY-DEPENDENT | Email change / re-verification not exposed; `docs/16 §7 #8` | FR-004 — Email change / re-verification | product owner |
+| FR-021 | POLICY-DEPENDENT | Live bidding flag OFF for all users; `docs/16 §3 #1–#14` | FR-021 — Eligible buyer bids while open (flag OFF for all users) | product owner |
+| FR-044 | POLICY-DEPENDENT | Provider chargebacks not implemented; `docs/16 §5 #8` | FR-044 — Provider-level chargebacks / disputes / negative balances | finance |
+| FR-051 | POLICY-DEPENDENT | Flat placeholder estimate only, no carrier rates; `docs/16 §6 #1–#6` | FR-051 — Real shipping rates and estimates | operations |
+| FR-072 | POLICY-DEPENDENT | No evidence uploads and no separate support-request workflow; `docs/16 §8 #4`, docs/13 | FR-072 — Evidence uploads / separate support-request workflow | product owner |
+| FR-073 | POLICY-DEPENDENT | Reason codes, outcomes and evidence window are placeholders; `docs/16 §8 #4` | FR-073 — Approved dispute outcomes and evidence window | product owner |

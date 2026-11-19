@@ -715,3 +715,19 @@ No P0 item is production-ready: none has a non-placeholder approved policy value
 - **Allowlist confirmed:** `HOSTED_URL_ALLOWLIST` and `isAllowedHostedUrl` are in `apps/api/src/payments/hostedSession.ts:11`, `:13`; test `hosted session: external or absolute returnUrl and cancelUrl return VALIDATION_ERROR and write nothing` passes.
 - **Manual grep (Step 2):** `grep -rniE 'stripe|paypal|authorize\.net|braintree|fetch\s*\(|axios|node-fetch|https?\.request' apps/api/src/payments` → no matches (exit 1). No provider name, SDK package name or network call exists in the payments module.
 - **Traceability row corrected:** Slice 13 supporting-evidence citations now carry exact file:line references; FR-042 status was not changed.
+
+## Slice 14 — Decision intake and no-decision hardening
+
+**Baseline (before any change):** clean tree at `fa7035013bb2f693fe400e3d497beea5afda0ffa`; lint, typecheck, test (361 API / 15 web / 1 shared), build and dependency audit all exit 0. Decision-log re-read: 35 rows, **0 VALID, 0 INCOMPLETE, 35 BLANK** — no decision-gated work was implemented.
+
+**Work done (no-decision hardening only):**
+- Partial P0 items FR-004, FR-021, FR-044, FR-051, FR-072 and FR-073 were re-checked. All remaining gaps are **POLICY-DEPENDENT**; none is a purely technical gap. Labelling and the deciding Decision ID for each were recorded in `phase1-deferral-register.md`. No code was changed for these items.
+- Added `apps/api/test/integration-slice14-boundaries.test.ts` (6 tests): a **characterization** test explicitly marked "current behaviour, pending owner decision" for support-role refunds (behaviour unchanged); buyer/other-buyer address and seller/other-seller order boundaries; no fee-mutation and no role-assignment GraphQL surface; and webhook **replay after success**.
+- Authorization cases already covered were confirmed (IDOR suite, suspended-user bid/list rejection, proxy non-exposure). **MFA is not implemented in code (FR-008, P1)** — recorded as a P1 gap; no MFA test added.
+- Webhook contract: replay after success added; existing invalid-signature, duplicate-delivery, out-of-order-unknown and redirect-no-op tests confirmed. The "payment succeeded but local processing failed" reconcile case is **skipped — the fake adapter has no such mode**.
+- Added `docs-implementation/migration-roundtrip-local.md`: how to run `npx -y pnpm@9.15.4 migrate:test` locally when `psql` is absent, using the repository's Docker Postgres service (container `aliauction-postgres`, host port `5433`). CI was not changed.
+- **Slice 11 clarification:** Slice 11 is **simply unstarted**, not blocked by any recorded decision. No work was started.
+
+**Needs an owner decision (not done):** support-role refund permission differs from the docs/09 "No by default" baseline. A deferral-register entry was added; a **new decision-log row is required** (the owner must add it — the 35-entry pack and the log were not edited).
+
+`docs-implementation/phase1-traceability.md` was not changed: no requirement status or implementation changed in this slice, only tests and documentation. P0 counts remain **24 met / 6 partial / 1 not met / 0 production-ready**. FR-042 remains **NOT MET**. No production-readiness claim is made.
