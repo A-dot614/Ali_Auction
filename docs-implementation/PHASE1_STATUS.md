@@ -731,3 +731,17 @@ No P0 item is production-ready: none has a non-placeholder approved policy value
 **Needs an owner decision (not done):** support-role refund permission differs from the docs/09 "No by default" baseline. A deferral-register entry was added; a **new decision-log row is required** (the owner must add it — the 35-entry pack and the log were not edited).
 
 `docs-implementation/phase1-traceability.md` was not changed: no requirement status or implementation changed in this slice, only tests and documentation. P0 counts remain **24 met / 6 partial / 1 not met / 0 production-ready**. FR-042 remains **NOT MET**. No production-readiness claim is made.
+
+## No-decision work completed
+
+Owner decisions were neither made nor inferred; no decision-log row, approval, legal/security review, restore drill or sign-off is recorded as done. `docs/16` and migrations were unchanged.
+
+1. **Test baseline:** `npx -y pnpm@9.15.4 -r test -- --reporter=verbose` run once — API **367 passed** (41 files), web **15 passed**, shared **1 passed**, exit 0.
+2. **Lint and typecheck:** `npx -y pnpm@9.15.4 lint` and `npx -y pnpm@9.15.4 -r typecheck` both exit 0.
+3. **Dependency audit:** `npx -y pnpm@9.15.4 audit --prod --audit-level=high` exit 0 — `No known vulnerabilities found`.
+4. **Restore-drill runbook:** created `docs-implementation/restore-drill-runbook.md` as a draft. Every step is marked `Owner: operations` / `Status: not executed`; nothing was executed. Drill cadence and RPO/RTO remain OPEN (decision-log §9 #8).
+5. **Alert/on-call template:** created `docs-implementation/alert-routes-template.md` listing only metrics and health checks that exist in `apps/api/src/observability` (plus gauges set in `apps/api/src/index.ts`). On-call contact column is blank and each row states `Decision: pending (decision-log: FR-???, operations)`; no contacts invented (decision-log §9 #9).
+6. **Sandbox config placeholders:** `apps/api/src/config.ts` now includes empty/false, NOT FOR PRODUCTION sandbox placeholders (`sandboxEnabled`, `sandboxMerchantId`, `sandboxApiKey`, `sandboxWebhookSecret`). No provider chosen, no SDK, no network call.
+7. **Decision-log cross-check:** every one of the **35** entries in `docs-implementation/phase1-decision-pack.md` has a matching row in `docs-implementation/decision-log.md` (35/35, no gaps). No row was filled or changed.
+
+P0 status is unchanged: **24 met / 6 partial / 1 not met / 0 production-ready**; FR-042 remains NOT MET. This section adds no production-readiness claim.
