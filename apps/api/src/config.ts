@@ -26,6 +26,8 @@ export const config = {
       // Dispute evidence / approved-outcome capabilities (decision-log FR-072, FR-073).
       disputeEvidenceUploadsEnabled: env("FEATURE_DISPUTE_EVIDENCE_UPLOADS_ENABLED", "false") === "true",
       approvedDisputeOutcomesEnabled: env("FEATURE_APPROVED_DISPUTE_OUTCOMES_ENABLED", "false") === "true",
+      // Email change is not implemented (decision-log FR-004). Default OFF.
+      emailChangeEnabled: env("FEATURE_EMAIL_CHANGE_ENABLED", "false") === "true",
     };
   },
   get session() {
@@ -73,6 +75,12 @@ export const config = {
       // Chargeback/negative-balance accounting treatment is a finance decision (FR-044).
       // Required input with NO default; no rule is inferred or hard-coded.
       chargebackTreatment: env("PAYMENTS_CHARGEBACK_TREATMENT", ""),
+    };
+  },
+  // Email-change policy is OPEN (decision-log FR-004). Required input with NO default.
+  get account() {
+    return {
+      emailChangeReverification: env("EMAIL_CHANGE_REVERIFICATION", ""),
     };
   },
   get fees() {
@@ -173,6 +181,9 @@ export function assertSafeFeatureFlags() {
     throw new Error(
       "FEATURE_APPROVED_DISPUTE_OUTCOMES_ENABLED must remain false: dispute policy decision not made."
     );
+  }
+  if (config.features.emailChangeEnabled) {
+    throw new Error("FEATURE_EMAIL_CHANGE_ENABLED must remain false: email-change decision not made.");
   }
 }
 
