@@ -55,6 +55,12 @@ export const config = {
       fakeWebhookSecret: env("FAKE_PAYMENT_WEBHOOK_SECRET", "fake-webhook-secret-placeholder-not-for-production"),
       // Placeholder hosted-session lifetime. NOT FOR PRODUCTION; TODO docs/16 §5 #5 (capture timing OPEN).
       hostedSessionTtlMinutes: Number(env("PAYMENTS_HOSTED_SESSION_TTL_MINUTES", "30")),
+      // NOT FOR PRODUCTION sandbox placeholders only: no values, no provider chosen, no SDK or network call.
+      // Provider/architecture decisions remain OPEN (decision-log FR-042; docs/16 §5 #1–#3).
+      sandboxEnabled: env("PAYMENTS_SANDBOX_ENABLED", "false") === "true",
+      sandboxMerchantId: env("PAYMENTS_SANDBOX_MERCHANT_ID", ""),
+      sandboxApiKey: env("PAYMENTS_SANDBOX_API_KEY", ""),
+      sandboxWebhookSecret: env("PAYMENTS_SANDBOX_WEBHOOK_SECRET", ""),
     };
   },
   get fees() {
