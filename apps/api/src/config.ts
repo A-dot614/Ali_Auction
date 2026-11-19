@@ -61,6 +61,10 @@ export const config = {
       sandboxMerchantId: env("PAYMENTS_SANDBOX_MERCHANT_ID", ""),
       sandboxApiKey: env("PAYMENTS_SANDBOX_API_KEY", ""),
       sandboxWebhookSecret: env("PAYMENTS_SANDBOX_WEBHOOK_SECRET", ""),
+      // Decision-dependent provider/adapter choice. Required input with NO default:
+      // code must refuse to construct a real adapter while this is unset (decision-log FR-042).
+      // No provider name, SDK or network client is implied by this key.
+      adapterKind: env("PAYMENTS_PROVIDER_ADAPTER_KIND", ""),
     };
   },
   get fees() {
