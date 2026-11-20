@@ -47,6 +47,12 @@ npx -y pnpm@9.15.4 --filter @aliauction/web dev
 | Shipping | `/demo/shipping` | Fake quoter response with carriers/scope/cost shown as undecided placeholders. |
 | Buyer disputes | `/demo/disputes` | Open a local dispute, list in-memory evidence and view status. |
 | Staff review | `/demo/staff/disputes` | Labeled review simulation; no outcome, evidence window or staff action is decided. |
+| Staff listing review | `/demo/staff/listings` | In-memory moderation queue; no approval decision is executed. |
+| Seller dashboard | `/demo/seller/dashboard` | Mock draft status and links to the demo seller screens. |
+| My listings | `/demo/seller/listings` | Mock listing statuses in a responsive table. |
+| New draft | `/demo/seller/listings/new` | Demo-only form; no draft is saved and no request is sent. |
+| Edit draft | `/demo/seller/listings/demo-listing-1/edit` | Demo-only edit form with in-memory initial values. |
+| Static / legal pages | `/demo/about`, `/demo/help`, `/demo/contact`, `/demo/terms`, `/demo/privacy`, `/demo/refunds` | Each shows `DRAFT, not approved by counsel`; no legal text is authored. |
 | Account | `/demo/account` | Profile edit limited to the API allowlist; email change is not offered. |
 | Email change | `/demo/account/email` | Shows `Not enabled yet`; no re-verification flow. |
 | Admin status | `/admin/status` | All feature flags OFF and a read-only decision-log table parsed at build time. |
@@ -59,8 +65,20 @@ npx -y pnpm@9.15.4 --filter @aliauction/web dev
 | Shipping | `/shipping` | `Not enabled yet`; no rate request. |
 | Disputes | `/disputes` | `Not enabled yet`. |
 | Staff review | `/staff/disputes` | `Not enabled yet`. |
-| My bids | `/buyer/bids` | `Bidding is not enabled`. |
-| Account | `/account` | Allowlisted fields only; email change shows `Not enabled yet`. |
+| My bids | `/buyer/bids` | `Bidding is not enabled`; saved items (watchlist) show `Not enabled yet`. |
+| My orders | `/buyer/orders` | Live `myOrders` query; neutral empty state when signed out. |
+| Order detail | `/buyer/orders/[orderId]` | Live participant-scoped `order` query; no provider data. |
+| Notifications | `/buyer/notifications` | Live `myNotifications` and `unreadCount`; relative links only. |
+| Seller dashboard | `/seller/dashboard` | Live verification status and recent drafts. |
+| My listings / new / edit | `/seller/listings`, `/seller/listings/new`, `/seller/listings/[listingId]/edit` | Live draft flow; photo uploads show `Not enabled yet`. |
+| Seller onboarding | `/seller/onboarding` | Live profile and verification mutations; no documents collected. |
+| Staff listing review | `/staff/listings` | Live `pendingListingReviews` queue and explicit moderation actions. |
+| Static / legal pages | `/about`, `/help`, `/contact`, `/terms`, `/privacy`, `/refunds` | Each shows `DRAFT, not approved by counsel`; no legal text is authored. |
+| Home | `/` | Live categories and published listings; ending-soon list only when auctions exist. |
+| Listing detail | `/listings/[slug]` | Live public `listing` query; no bid or payment request. |
+| Search / category | `/search`, `/categories/[slug]` | Search form and category placeholder state. |
+| Offline / error / 404 | `/offline` and framework states | Neutral copy; raw error text is never rendered. |
+| Account | `/account` | Allowlisted fields only; email change shows `Not enabled yet`; sign-out uses the existing mutation. |
 
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and
 signed off. No approval, legal review, security review, restore drill or sign-off is claimed here.

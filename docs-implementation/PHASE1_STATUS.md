@@ -827,3 +827,59 @@ signed off. No approval, legal review, security review, restore drill or sign-of
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
 
 P0 status is unchanged (**24 met / 6 partial / 1 not met / 0 production-ready**); FR-042 remains NOT MET. No approval, legal review, security review, restore drill or sign-off was marked done. No flag was enabled.
+
+## Frontend complete
+
+All real-mode and demo pages are implemented and reachable. "Live" means the page calls an
+existing API operation or renders build-time read-only data. "Not enabled yet" means the page
+shows the neutral state and makes no request for a capability that is still blocked. No decision
+was made, inferred or pre-filled. No decision-log row, `docs/16`, migration, approval or sign-off
+was changed. P0 status remains **24 met / 6 partial / 1 not met / 0 production-ready**; FR-042
+remains NOT MET.
+
+| Page / path | Real mode | Demo equivalent | Decision-log ID still needed |
+|---|---|---|---|
+| Home `/` | Live: categories, published listings, auction end times when present | `/demo` | §8 #1–#10 — Product and operations |
+| Search `/search` | Live form; empty state until catalogue policy is approved | `/demo/listings` | §8 #1–#10 |
+| Category `/categories/[slug]` | `Not enabled yet` (placeholder category view) | `/demo/listings` filtered | §8 #1–#10 |
+| Listing detail `/listings/[slug]` | Live public `listing` query; no bid or payment request | `/demo/listings/[slug]` | §8 #1–#10 |
+| Sign in `/auth/login` | Live `login` mutation | — | None for the form itself |
+| Register `/auth/register` | Live `register` mutation | — | None for the form itself |
+| Verify email `/auth/verify-email` | Live `verifyEmail` mutation | — | None for the form itself |
+| Forgot password `/auth/forgot-password` | Live `requestPasswordReset` mutation | — | None for the form itself |
+| Reset password `/auth/reset-password` | Live `resetPassword` mutation | — | None for the form itself |
+| Account `/account` | Live allowlisted fields and `logout` mutation | `/demo/account` | None for the allowlisted fields |
+| Email change `/account/email` | `Not enabled yet` | `/demo/account/email` | FR-004 — Email change / re-verification |
+| My bids `/buyer/bids` | `Bidding is not enabled`; saved items `Not enabled yet` | `/demo/bidding` | FR-021, §3 #1–#9, §3 #14 (FR-021 option A keeps the flag OFF) |
+| My orders `/buyer/orders` | Live `myOrders` query | `/demo/orders` | FR-045, FR-044 |
+| Order detail `/buyer/orders/[orderId]` | Live participant-scoped `order` query | `/demo/orders/[orderId]` | FR-044 |
+| Notifications `/buyer/notifications` | Live `myNotifications` and `unreadCount` | — | §7 #1–#10 — Identity, privacy and trust |
+| Seller dashboard `/seller/dashboard` | Live verification status and recent drafts | `/demo/seller/dashboard` | §7 #1–#10 |
+| My listings `/seller/listings` | Live `myListings` query | `/demo/seller/listings` | §8 #1–#10 |
+| New draft `/seller/listings/new` | Live `createListingDraft`; photo uploads `Not enabled yet` | `/demo/seller/listings/new` | §8 #1–#10 |
+| Edit draft `/seller/listings/[listingId]/edit` | Live `updateListingDraft` and `submitListingForReview` | `/demo/seller/listings/[listingId]/edit` | §8 #1–#10 |
+| Seller onboarding `/seller/onboarding` | Live `createSellerProfile` and `submitSellerVerification`; no documents collected | — | §7 #1–#10 |
+| Seller orders `/seller/orders` | `Not enabled yet` | — | FR-045, §4 #1–#11 |
+| Checkout `/checkout` | `Payments not enabled`; no payment endpoint call | `/demo/checkout` | FR-042, §5 #1–#10 |
+| Shipping `/shipping` | `Not enabled yet`; no rate request | `/demo/shipping` | FR-051, §6 #1–#9 |
+| Disputes `/disputes` | `Not enabled yet`; no dispute endpoint call | `/demo/disputes` | FR-072 |
+| Staff dispute review `/staff/disputes` | `Not enabled yet` | `/demo/staff/disputes` | FR-073 |
+| Staff listing review `/staff/listings` | Live `pendingListingReviews` queue and explicit moderation actions | `/demo/staff/listings` | §8 #1–#10 |
+| Admin status `/admin/status` | Read-only build-time flags and decision-log table (1 decided / 34 pending) | shared page | All pending rows before any capability is enabled |
+| About `/about` | `DRAFT, not approved by counsel` placeholder | `/demo/about` | §9 #6, §8 #1–#10 |
+| Help `/help` | `DRAFT, not approved by counsel` placeholder | `/demo/help` | §8 #1–#10 (support hours and languages) |
+| Contact `/contact` | `DRAFT, not approved by counsel` placeholder | `/demo/contact` | §8 #1–#10 |
+| Terms `/terms` | `DRAFT, not approved by counsel` placeholder; no legal text authored | `/demo/terms` | §9 #6 |
+| Privacy `/privacy` | `DRAFT, not approved by counsel` placeholder; no legal text authored | `/demo/privacy` | §9 #6, §7 #1–#10 |
+| Refunds `/refunds` | `DRAFT, not approved by counsel` placeholder; no legal text authored | `/demo/refunds` | §9 #6, FR-045 |
+| Offline `/offline` | Neutral offline notice; no account data | — | None |
+
+Quality pass: `loading.tsx` skeletons, root `not-found.tsx` and `error.tsx`, per-page metadata,
+an original geometric icon, labelled fields, visible focus, one `h1` through the shared shell and
+360px no-scroll layout are in place. `apps/web/test/frontend-pages.test.mjs` covers the completed
+real and demo routes, API wiring, unsupported-capability labels, legal draft notices and quality
+states. The production-bundle leak check and the demo-mode production-build failure test still pass.
+
+Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
+
+No approval, legal review, security review, restore drill or sign-off was marked done. No flag was enabled.
