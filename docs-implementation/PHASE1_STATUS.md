@@ -815,3 +815,15 @@ Local commands, demo URLs and what each screen proves are documented in
 
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and
 signed off. No approval, legal review, security review, restore drill or sign-off was marked done.
+
+## Final hardening
+
+1. **Production-bundle leak check:** demo routes are `page.demo.tsx` files enabled only by a demo-mode `pageExtensions` setting; demo copy and catalogue data are loaded only by demo-only components. Added `apps/web/scripts/check-production-bundle.mjs` (`check:bundle-leak`) and static leak tests. No demo-only string remains in real-mode source; the ordered build and bundle-scan results are in the handover report.
+2. **Secrets and config hygiene:** `.env.example` was reviewed and left unchanged — payment keys are empty, `JWT_SECRET` is a placeholder, and service URLs are local only. Added `apps/web/test/config-hygiene.test.mjs` for placeholders, no provider SDK dependency, no tracked `.env`, and no committed key-like strings. No real credential was found or added.
+3. **Accessibility and responsive pass:** the shared shell owns the single `h1`; all form controls are labelled; buttons are native and typed; `:focus-visible` is retained; banner text measures 11.71:1 and "Not enabled yet" text 5.43:1 against their backgrounds. Added 360px wrapping rules (border-box, overflow-wrap, capped media, wrapped navigation, stacked tables) and `apps/web/test/a11y-responsive.test.mjs`.
+4. **Error-path pass:** `stateForFailure` maps `NOT_ENABLED`, disabled-capability codes, network failure, permission failure and unknown codes to neutral states; the listing page shows `Not enabled yet`, a clear network message or an empty state without crashing or echoing server text. Added `apps/web/test/error-paths.test.mjs`.
+5. **Owner review pack:** created `docs-implementation/owner-review-pack.md` with `/demo` URLs, page descriptions and decision-log IDs/statuses for product owner, finance, counsel, operations and engineering lead. FR-021 is noted as recorded with decider "Bilal" and requiring confirmation by the actual product owner of record. No row was edited.
+
+Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
+
+P0 status is unchanged (**24 met / 6 partial / 1 not met / 0 production-ready**); FR-042 remains NOT MET. No approval, legal review, security review, restore drill or sign-off was marked done. No flag was enabled.
