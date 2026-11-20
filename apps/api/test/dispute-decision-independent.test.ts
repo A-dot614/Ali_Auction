@@ -32,7 +32,7 @@ afterEach(() => {
   });
 });
 
-const AT = new Date("2026-11-19T12:00:00.000Z");
+const AT = new Date(Date.UTC(2026, 10, 19, 12, 0, 0));
 const evidence: EvidenceRecord = {
   evidenceId: "evidence-1",
   disputeId: "dispute-1",
