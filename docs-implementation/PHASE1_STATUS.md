@@ -783,3 +783,35 @@ No owner decision was made, inferred or pre-filled. No capability was enabled: e
 - **FR-021 — bidding:** no auction-rule behaviour was added. `apps/api/test/live-bidding-startup-guards.test.ts` additionally pins all decision-dependent flags to `false`, checks that both startup guards are invoked, and verifies the production-only money guard. FR-021 option A (recorded 2026-11-19) keeps the flag OFF. Still needs: **§3 #1–#9 and §3 #14 — auction-rule decisions** before enablement could be considered.
 
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off. No approval, legal review, security review, restore drill or sign-off was marked done.
+
+## Frontend built
+
+The complete Phase 1 web navigation is in place, with a web-only build-time demo setting
+(`NEXT_PUBLIC_DEMO_MODE=true`, equivalent name `VITE_DEMO_MODE=true`). Demo data is in memory and
+uses the API's provider-neutral fake response shapes. A production build with demo mode on fails.
+Every demo screen shows the exact banner `DEMO: not real, nothing is charged, no decision made`.
+Real-mode screens show `Not enabled yet`, `Bidding is not enabled` or `Payments not enabled`
+instead of an error and make no bidding or payment request. P0 status is unchanged
+(**24 met / 6 partial / 1 not met / 0 production-ready**); FR-042 remains NOT MET. No decision-log
+row, `docs/16`, migration, approval or sign-off was changed.
+
+| Page / path | Built or reused | Decision-log ID still needed before it can be switched on |
+|---|---|---|
+| App shell, navigation, banner, not-enabled state | Reused `PageShell`, `ScreenState`; added `DemoBanner`, `NotEnabled`, responsive styles | None for the shell itself; per-feature IDs below |
+| Browse / search / filter (`/search`, `/demo/listings`) | Reused search route; in-memory filtering in demo | §8 #1–#10 — Product and operations (category/moderation policy) |
+| Listing detail (`/listings/[slug]`, `/demo/listings/[slug]`) | Reused listing route and server-authoritative countdown; added photos and seller panel | §8 #1–#10 — Product and operations |
+| Bidding (`/buyer/bids`, `/demo/bidding`, shared `AuctionPanel`) | Real mode disabled; demo simulation uses local state only | FR-021 and §3 #1–#9, §3 #14 — auction-rule decisions (FR-021 option A keeps the flag OFF) |
+| Checkout / payments (`/checkout`, `/demo/checkout`) | Provider-neutral fake hosted session, success, failure and refund states; no provider named | FR-042 — Hosted/tokenized payment collection; §5 #1–#10 — Payment architecture |
+| Orders (`/buyer/orders`, `/demo/orders`, `/demo/orders/[orderId]`) | Added demo list, status, payment-event records and timeline | FR-044 — Provider-level chargebacks / disputes / negative balances |
+| Shipping (`/shipping`, `/demo/shipping`) | Fake quoter display; real mode shows `Not enabled yet` while inputs are unset | FR-051 — Real shipping rates; §6 #1–#9 — Shipping and fulfilment rules |
+| Disputes (`/disputes`, `/demo/disputes`) | Buyer dispute, in-memory evidence list and status view | FR-072 — Evidence uploads / support-request workflow |
+| Staff review (`/staff/disputes`, `/demo/staff/disputes`) | Real mode `Not enabled yet`; demo simulation with no outcome decided | FR-073 — Approved dispute outcomes and evidence window |
+| Account (`/account`, `/demo/account`) | Profile edit limited to the API allowlist; no email field edited | None for the allowlisted fields |
+| Email change (`/account/email`, `/demo/account/email`) | `Not enabled yet` in both modes | FR-004 — Email change / re-verification |
+| Admin status (`/admin/status`) | Read-only flags table and decision-log table parsed at build time (1 decided / 34 pending) | All pending rows listed in the table before any capability is enabled |
+
+Local commands, demo URLs and what each screen proves are documented in
+`docs-implementation/demo-guide.md`.
+
+Real bidding and real-money payments stay OFF until every required decision-log row is filled and
+signed off. No approval, legal review, security review, restore drill or sign-off was marked done.
