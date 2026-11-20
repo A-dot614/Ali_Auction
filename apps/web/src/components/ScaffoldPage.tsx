@@ -1,5 +1,6 @@
 import PageShell from "./PageShell";
 import ScreenState from "./ScreenState";
+import Card from "./ui/Card";
 import type { ScreenStateName } from "../lib/states";
 
 /**
@@ -19,10 +20,9 @@ export default function ScaffoldPage({
 }) {
   return (
     <PageShell title={title} description={description}>
-      <section className="card" aria-labelledby="screen-status-heading">
-        <h2 id="screen-status-heading">Screen status</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+      <Card title="Screen status"> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <ScreenState state={state} />
-      </section>
+      </Card>
     </PageShell>
   );
 }

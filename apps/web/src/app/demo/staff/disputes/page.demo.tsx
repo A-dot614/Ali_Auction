@@ -10,7 +10,7 @@ export default function DemoStaffDisputesPage() {
       title="Demo staff review"
       description="Labeled review simulation. No outcome, evidence window or staff action is decided."
     >
-      <section className="card">
+      <section className="card ui-card">
         <p><strong>Simulation only: no review decision is made and no data is written.</strong></p>
         <table className="status-table responsive-table">
           <thead>

@@ -17,7 +17,7 @@ export default async function DemoListingsPage({
   });
   return (
     <PageShell title="Demo listings" description="Browse, search and filter the in-memory demo catalogue.">
-      <form className="card" action="/demo/listings" method="get">
+      <form className="card ui-card" action="/demo/listings" method="get">
         <label htmlFor="demo-listings-query">Search demo listings</label>
         <input id="demo-listings-query" name="q" type="search" defaultValue={params.q ?? ""} />
         <label htmlFor="demo-listings-category">Category</label>
@@ -36,7 +36,7 @@ export default async function DemoListingsPage({
       </form>
       <section className="grid" aria-label="Demo listings">
         {listings.map((listing) => (
-          <article className="card" key={listing.slug}>
+          <article className="card ui-card" key={listing.slug}>
             <h2>{listing.title}</h2>
             <p className="muted">{listing.categoryName}</p>
             <p>Current demo price: {formatMinor(listing.currentPrice)}</p>

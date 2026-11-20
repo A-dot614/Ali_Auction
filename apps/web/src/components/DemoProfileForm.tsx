@@ -14,7 +14,7 @@ export default function DemoProfileForm() {
   }
 
   return (
-    <section className="card" aria-labelledby="demo-profile-heading">
+    <section className="card ui-card" aria-labelledby="demo-profile-heading">
       <h2 id="demo-profile-heading">Demo profile edit</h2>
       <p><strong>Local only. Email and account status are not editable here.</strong></p>
       <form onSubmit={save}>

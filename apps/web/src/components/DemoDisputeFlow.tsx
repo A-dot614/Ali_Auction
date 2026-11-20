@@ -55,7 +55,7 @@ export default function DemoDisputeFlow({ initialOrderId }: { initialOrderId?: s
 
   return (
     <>
-      <section className="card" aria-labelledby="demo-dispute-open-heading">
+      <section className="card ui-card" aria-labelledby="demo-dispute-open-heading">
         <h2 id="demo-dispute-open-heading">Open a demo dispute</h2>
         <p><strong>Simulation only. Evidence is not uploaded and no outcome is decided.</strong></p>
         <form onSubmit={openDispute}>
@@ -71,7 +71,7 @@ export default function DemoDisputeFlow({ initialOrderId }: { initialOrderId?: s
         </form>
         {message ? <p role="status">{message}</p> : null}
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Demo dispute status and evidence</h2>
         {disputes.map((dispute) => (
           <article key={dispute.id}>

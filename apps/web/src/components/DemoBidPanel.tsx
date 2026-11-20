@@ -40,7 +40,7 @@ export default function DemoBidPanel({
   const currentPriceMinor = bids.length > 0 ? bids[bids.length - 1].amountMinor : startingPriceMinor;
 
   return (
-    <section className="card" aria-labelledby="demo-bid-heading">
+    <section className="card ui-card" aria-labelledby="demo-bid-heading">
       <h2 id="demo-bid-heading">Bidding simulation</h2>
       <p><strong>Simulation only — no auction rule is decided and no bid is sent anywhere.</strong></p>
       <dl>

@@ -52,7 +52,7 @@ export default function DemoCheckout() {
   }
 
   return (
-    <section className="card" aria-labelledby="demo-checkout-heading">
+    <section className="card ui-card" aria-labelledby="demo-checkout-heading">
       <h2 id="demo-checkout-heading">Demo checkout walkthrough</h2>
       <p><strong>Simulation only: nothing is charged and no payment decision is made.</strong></p>
       <p className="muted">Demo order: {ORDER_ID}. Amounts are not derived from any fee or shipping rule.</p>

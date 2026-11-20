@@ -15,7 +15,7 @@ export default function DemoShippingQuote() {
   }
 
   return (
-    <section className="card" aria-labelledby="demo-shipping-heading">
+    <section className="card ui-card" aria-labelledby="demo-shipping-heading">
       <h2 id="demo-shipping-heading">Demo rate quote</h2>
       <p><strong>Fake quoter only. Carrier, scope and cost are placeholders; no decision is made.</strong></p>
       <form onSubmit={requestQuote}>

@@ -46,7 +46,7 @@ export default function AuctionPanel({
   }, [endsAtIso, initialServerTimeIso]);
 
   return (
-    <section className="card" aria-labelledby="auction-heading">
+    <section className="card ui-card" aria-labelledby="auction-heading">
       <h2 id="auction-heading">Auction status</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
       <dl>
         <dt>Current price (minor units)</dt> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}

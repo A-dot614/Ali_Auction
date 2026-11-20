@@ -32,7 +32,7 @@ const PRIMARY_LINKS = [
 export default function PageShell({ title, description, children }: Props) {
   return (
     <>
-      <a href="#main-content" className="button">Skip to main content</a> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+      <a href="#main-content" className="ui-button ui-button--secondary">Skip to main content</a> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
       <header>
         <p><strong>AliAuction.ca</strong></p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <nav aria-label="Primary">

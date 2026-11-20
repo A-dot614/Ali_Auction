@@ -18,7 +18,7 @@ export default async function DemoOrderDetailPage({ params }: { params: Promise<
   }
   return (
     <PageShell title="Demo order detail" description={`${order.id} — ${order.listingTitle}`}>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Order status</h2>
         <dl>
           <dt>Order</dt><dd>{order.id}</dd>
@@ -28,7 +28,7 @@ export default async function DemoOrderDetailPage({ params }: { params: Promise<
         </dl>
         <p className="muted">No charge, payout or fee rule is represented here.</p>
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Payment events</h2>
         <table className="status-table responsive-table">
           <thead>
@@ -45,7 +45,7 @@ export default async function DemoOrderDetailPage({ params }: { params: Promise<
           </tbody>
         </table>
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Timeline</h2>
         <ol className="timeline">
           {order.events.map((event) => (

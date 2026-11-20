@@ -25,7 +25,7 @@ export default async function DemoListingPage({ params }: { params: Promise<{ sl
       title={listing.title}
       description={`Demo listing detail — ${listing.categoryName}, ${listing.condition}.`}
     >
-      <section className="card" aria-labelledby="demo-photos-heading">
+      <section className="card ui-card" aria-labelledby="demo-photos-heading">
         <h2 id="demo-photos-heading">Photos</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <div className="photo-grid">
           {listing.photos.map((label) => (
@@ -35,7 +35,7 @@ export default async function DemoListingPage({ params }: { params: Promise<{ sl
           ))}
         </div>
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Seller information</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <dl>
           <dt>Seller</dt><dd>{listing.seller.displayName}</dd> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
@@ -43,7 +43,7 @@ export default async function DemoListingPage({ params }: { params: Promise<{ sl
           <dt>Verification</dt><dd>{listing.seller.verificationLabel}</dd> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         </dl>
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Listing summary</h2> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <dl>
           <dt>Starting price</dt><dd>{formatMinor(listing.startingPrice)}</dd> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
