@@ -883,3 +883,28 @@ states. The production-bundle leak check and the demo-mode production-build fail
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
 
 No approval, legal review, security review, restore drill or sign-off was marked done. No flag was enabled.
+
+## Docker
+
+The whole local stack runs from one root Compose file: Postgres, Redis, one-shot migrations, API
+and web. See `docs-implementation/docker-guide.md` for exact commands, log viewing, stopping and
+database-volume reset.
+
+- Real mode is the default: `docker compose up -d --build`. The web image is built with
+  `NEXT_PUBLIC_DEMO_MODE=false`; `/demo` returns 404.
+- Demo mode is an isolated profile and a separate non-production image target:
+  `docker compose --profile demo up -d --build`. It serves `/demo` on host port 3001 while the
+  real web stays on port 3000. It is never the production image.
+- The API image builds from the existing TypeScript source and runs as a non-root user with only
+  runtime dependencies; its health check uses `/health`. The migration service runs the existing
+  `node-pg-migrate` command once and exits.
+- `docker/.env.example` holds dev-only placeholders, marks them `DEV ONLY, NOT FOR PRODUCTION`,
+  and keeps both `FEATURE_LIVE_BIDDING_ENABLED` and `FEATURE_REAL_MONEY_PAYMENTS_ENABLED` false.
+  No `.env` file is baked into an image, and root/app `.dockerignore` files exclude secrets and
+  build artifacts. No payment provider is named or configured.
+
+This section changes no P0 status or count (**24 met / 6 partial / 1 not met / 0 production-ready**);
+FR-042 remains NOT MET. No approval, legal review, security review, restore drill or sign-off was
+marked done.
+
+Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
