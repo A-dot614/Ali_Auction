@@ -1,9 +1,9 @@
 import PageShell from "../../../components/PageShell";
 import ScreenState from "../../../components/ScreenState";
 import AuctionPanel from "../../../components/AuctionPanel";
+import NotEnabled from "../../../components/NotEnabled";
 import { gql } from "../../../lib/graphql";
-import { errorCode } from "../../../lib/errors";
-import { isPermissionDenied } from "../../../lib/states";
+import { stateForFailure } from "../../../lib/error-state";
 
 // Data-driven page: resolved at request time so no API fetch happens at build.
 export const dynamic = "force-dynamic";
@@ -41,10 +41,19 @@ export default async function ListingPage({ params }: { params: Promise<{ slug: 
   }
 
   if (failure) {
-    const code = errorCode(failure) ?? failure;
+    const { state, detail } = stateForFailure(failure);
+    const notice =
+      state === "not-enabled" ? (
+        <NotEnabled message="Not enabled yet" detail={detail} />
+      ) : (
+        <>
+          <ScreenState state={state} />
+          <p className="muted">{detail}</p>
+        </>
+      );
     return (
       <PageShell title="Listing" description="Listing details.">
-        <ScreenState state={isPermissionDenied(code) ? "permission-denied" : "error"} />
+        {notice}
       </PageShell>
     );
   }

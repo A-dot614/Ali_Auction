@@ -22,3 +22,8 @@ export function stateCopy(state: ScreenStateName): string {
 export function isPermissionDenied(errorCode: string | null): boolean {
   return errorCode === "FORBIDDEN" || errorCode === "UNAUTHENTICATED";
 }
+
+/** Disabled capabilities are a distinct, neutral state — never a raw error. */
+export function isNotEnabled(code: string | null | undefined): boolean {
+  return code === "NOT_ENABLED" || code === "LIVE_BIDDING_DISABLED" || code === "REAL_MONEY_DISABLED";
+}

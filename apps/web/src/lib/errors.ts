@@ -5,6 +5,8 @@
  */
 
 export const ERROR_MESSAGES: Record<string, string> = {
+  NOT_ENABLED: "Not enabled yet.", // PLACEHOLDER COPY (docs/16 §8 #6)
+  NETWORK_ERROR: "We could not reach the service. Please try again.", // PLACEHOLDER COPY (docs/16 §8 #6)
   UNAUTHENTICATED: "Please sign in to continue.", // PLACEHOLDER COPY (docs/16 §8 #6)
   FORBIDDEN: "You do not have permission to do that.", // PLACEHOLDER COPY (docs/16 §8 #6)
   EMAIL_NOT_VERIFIED: "Please verify your email before continuing.", // PLACEHOLDER COPY (docs/16 §8 #6)
