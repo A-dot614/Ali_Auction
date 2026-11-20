@@ -70,12 +70,13 @@ export default function AuthForm({ kind }: { kind: AuthKind }) {
   }
 
   return (
-    <form className="card" onSubmit={submit}>
+    <form className="card ui-card" onSubmit={submit}>
       {FIELDS[kind].map((field) => (
         <div key={field.name}>
           <label htmlFor={`auth-${field.name}`}>{field.label}</label>
           <input
             id={`auth-${field.name}`}
+            className="ui-input"
             name={field.name}
             type={field.type}
             required={field.required}
@@ -84,12 +85,13 @@ export default function AuthForm({ kind }: { kind: AuthKind }) {
           />
         </div>
       ))}
-      <button type="submit">Continue</button> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+      <button type="submit" className="ui-button ui-button--primary">Continue</button> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
       {kind === "forgot-password" ? (
         <>
           {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
           <button
             type="button"
+            className="ui-button ui-button--secondary"
             onClick={() => {
               void gql(`mutation($email: String!) { resendVerification(email: $email) { ok message } }`, { email: values.email });
               setStatus(NEUTRAL);

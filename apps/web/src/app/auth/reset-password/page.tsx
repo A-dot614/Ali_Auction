@@ -1,5 +1,8 @@
 import PageShell from "../../../components/PageShell";
 import AuthForm from "../../../components/AuthForm";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Choose a new password — AliAuction.ca", description: "Set a new password with a reset token." };
 
 export default function ResetPasswordPage() {
   return (

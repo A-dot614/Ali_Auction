@@ -1,17 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import PageShell from "../../components/PageShell";
 import NotEnabled from "../../components/NotEnabled";
+import LogoutButton from "../../components/LogoutButton";
 import { PROFILE_EDIT_FIELDS } from "../../lib/profile-fields";
 
+export const metadata: Metadata = {
+  title: "Account — AliAuction.ca",
+  description: "Account actions and the current profile field allowlist.",
+};
 export const dynamic = "force-dynamic";
 
 export default function AccountPage() {
   return (
     <PageShell title="Account" description="Your account details.">
-      <section className="card">
+      <section className="card ui-card">
         <h2>Profile fields</h2>
         <p className="muted">Allowlisted fields: {PROFILE_EDIT_FIELDS.join(", ")}. Email and account status are excluded.</p>
         <p>This build shows the allowlist only; no profile request is sent from this screen.</p>
+        <LogoutButton />
       </section>
       <NotEnabled
         message="Not enabled yet"
