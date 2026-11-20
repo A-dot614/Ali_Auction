@@ -1,0 +1,96 @@
+# AliAuction.ca local stack. DEV ONLY, NOT FOR PRODUCTION.
+# Default target is REAL mode: demo routes are not built or served.
+# All credentials and feature flags come from docker/.env.example (dev-only placeholders).
+# The web containers share the API network namespace so the browser-published
+# http://localhost:4000 origin also resolves from Next.js server components.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aliauction-db
+    restart: unless-stopped
+    env_file:
+      - docker/.env.example
+    ports:
+      - "5433:5432"
+    volumes:
+      - aliauction_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: aliauction-redis
+    restart: unless-stopped
+    env_file:
+      - docker/.env.example
+    ports:
+      - "6380:6379"
+    volumes:
+      - aliauction_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migrate
+    image: aliauction-migrate:local
+    env_file:
+      - docker/.env.example
+    environment:
+      FEATURE_LIVE_BIDDING_ENABLED: "false"
+      FEATURE_REAL_MONEY_PAYMENTS_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: api
+    image: aliauction-api:local
+    env_file:
+      - docker/.env.example
+    environment:
+      FEATURE_LIVE_BIDDING_ENABLED: "false"
+      FEATURE_REAL_MONEY_PAYMENTS_ENABLED: "false"
+    # Web containers share this namespace, so their host ports are published here.
+    ports:
+      - "4000:4000"
+      - "3000:3000"
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: web
+      args:
+        NEXT_PUBLIC_DEMO_MODE: "false"
+        NEXT_PUBLIC_API_ORIGIN: "http://localhost:4000"
+    image: aliauction-web:local
+    network_mode: "service:api"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  aliauction_pgdata:
+  aliauction_redisdata:
