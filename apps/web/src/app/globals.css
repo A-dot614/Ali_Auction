@@ -241,6 +241,10 @@ header { padding: 12px 16px; border-bottom: 1px solid var(--border); background:
 .review-actions { margin-top: var(--space-3); }
 .review-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
+/* Draft-only public information pages: visually marked, never styled as approved. */
+.draft-notice { border-left: 4px solid var(--accent); }
+.draft-notice strong { color: var(--text); }
+
 @media (max-width: 767px) {
   .status-table thead { display: none; }
   .status-table, .status-table tbody, .status-table tr, .status-table td { display: block; width: 100%; }
