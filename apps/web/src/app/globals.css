@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* D6/D7: padding must never add to an element's width at 360px. */
+*, *::before, *::after { box-sizing: border-box; }
+
 :root {
   --bg: #f7f5ef;
   --surface: #ffffff;
@@ -17,6 +20,8 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  /* Long IDs and identifiers wrap instead of forcing horizontal scroll. */
+  overflow-wrap: anywhere;
 }
 
 main {
@@ -41,6 +46,8 @@ main {
 
 .muted { color: var(--muted); }
 code { background: #eef2f6; padding: 2px 6px; border-radius: 6px; }
+img, table, pre, code { max-width: 100%; }
+td, th, dd, dt { overflow-wrap: anywhere; }
 h1 { font-size: 1.8rem; margin-bottom: 8px; }
 h2 { margin-top: 0; font-size: 1.1rem; }
 
@@ -76,7 +83,7 @@ button, input, select, textarea, a.button {
 /* App shell: wraps on narrow screens and keeps 44px touch targets. */
 header { padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .nav-list { display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; padding: 0; margin: 8px 0 0; }
-.nav-list a { display: inline-block; padding: 8px 4px; }
+.nav-list a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 6px; }
 
 /* Demo notice is deliberately high contrast and text-based, never colour-only. */
 .demo-banner {
