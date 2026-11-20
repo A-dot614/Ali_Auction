@@ -47,9 +47,8 @@ test("dev demo and production without demo load successfully", () => {
 });
 
 test("demo mode is build-time only and accepts the Next public setting", async () => {
-  const { demoModeFromEnv, assertDemoBuildAllowed, DEMO_BANNER_TEXT } = await import(
-    "../src/lib/demo.ts"
-  );
+  const { demoModeFromEnv, assertDemoBuildAllowed } = await import("../src/lib/demo.ts");
+  const { DEMO_BANNER_TEXT } = await import("../src/lib/demo-copy.ts");
   assert.equal(demoModeFromEnv({}), false);
   assert.equal(demoModeFromEnv({ NEXT_PUBLIC_DEMO_MODE: "true" }), true);
   assert.equal(demoModeFromEnv({ VITE_DEMO_MODE: "true" }), true);

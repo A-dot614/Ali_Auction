@@ -12,7 +12,7 @@ function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...walk(full));
-    else if (entry.name === "page.tsx") out.push(full);
+    else if (entry.name === "page.tsx" || entry.name === "page.demo.tsx") out.push(full);
   }
   return out;
 }
@@ -21,18 +21,18 @@ const ALL_PAGES = walk(path.join(root, "src/app"));
 const PARAMS = { slug: "vintage-desk-lamp", orderId: "demo-order-1", listingId: "demo-listing-1" };
 
 const DEMO_EXPECTATIONS = [
-  ["src/app/demo/page.tsx", ["Demo hub"]],
-  ["src/app/demo/listings/page.tsx", ["Demo listings"]],
-  ["src/app/demo/listings/[slug]/page.tsx", ["Vintage desk lamp", "Photos", "Seller information", "Auction timer"]],
-  ["src/app/demo/bidding/page.tsx", ["Demo bidding simulation"]],
-  ["src/app/demo/checkout/page.tsx", ["Demo checkout"]],
-  ["src/app/demo/orders/page.tsx", ["Demo orders"]],
-  ["src/app/demo/orders/[orderId]/page.tsx", ["Payment events", "Timeline", "dispute_opened", "refund_recorded"]],
-  ["src/app/demo/shipping/page.tsx", ["Demo shipping"]],
-  ["src/app/demo/disputes/page.tsx", ["Demo disputes"]],
-  ["src/app/demo/staff/disputes/page.tsx", ["Demo staff review", "No outcome"]],
-  ["src/app/demo/account/page.tsx", ["Demo account", "Not enabled yet"]],
-  ["src/app/demo/account/email/page.tsx", ["Not enabled yet"]],
+  ["src/app/demo/page.demo.tsx", ["Demo hub"]],
+  ["src/app/demo/listings/page.demo.tsx", ["Demo listings"]],
+  ["src/app/demo/listings/[slug]/page.demo.tsx", ["Vintage desk lamp", "Photos", "Seller information", "Auction timer"]],
+  ["src/app/demo/bidding/page.demo.tsx", ["Demo bidding simulation"]],
+  ["src/app/demo/checkout/page.demo.tsx", ["Demo checkout"]],
+  ["src/app/demo/orders/page.demo.tsx", ["Demo orders"]],
+  ["src/app/demo/orders/[orderId]/page.demo.tsx", ["Payment events", "Timeline", "dispute_opened", "refund_recorded"]],
+  ["src/app/demo/shipping/page.demo.tsx", ["Demo shipping"]],
+  ["src/app/demo/disputes/page.demo.tsx", ["Demo disputes"]],
+  ["src/app/demo/staff/disputes/page.demo.tsx", ["Demo staff review", "No outcome"]],
+  ["src/app/demo/account/page.demo.tsx", ["Demo account", "Not enabled yet"]],
+  ["src/app/demo/account/email/page.demo.tsx", ["Not enabled yet"]],
   ["src/app/admin/status/page.tsx", ["1 decided / 34 pending", "FEATURE_LIVE_BIDDING_ENABLED", "OFF"]],
 ];
 

@@ -1,16 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import DemoBanner from "./DemoBanner";
-import { demoMode } from "../lib/demo";
 
 /**
  * Shared semantic layout (D1/D6/D7): header, labelled primary nav, one main
  * landmark with a single h1, and a footer. Mobile-first, 320px-safe.
  * PLACEHOLDER COPY (docs/16 §8 #6) on all user-visible strings.
  *
- * The demo banner is rendered globally in demo builds, so every screen that
- * touches bidding, payments, shipping rates, disputes or email change carries
- * the same visible notice.
+ * Demo navigation and the demo notice are loaded only in a demo build. The
+ * direct build-time env check lets the bundler remove that import entirely
+ * from the non-demo bundle.
  */
 
 type Props = { title: string; description?: string; children: ReactNode };
@@ -31,18 +29,15 @@ const PRIMARY_LINKS = [
   { href: "/auth/register", label: "Register" },
 ] as const;
 
-const DEMO_LINKS = [
-  { href: "/demo", label: "Demo hub" },
-  { href: "/demo/checkout", label: "Demo checkout" },
-  { href: "/demo/orders", label: "Demo orders" },
-  { href: "/demo/shipping", label: "Demo shipping" },
-  { href: "/demo/disputes", label: "Demo disputes" },
-  { href: "/demo/staff/disputes", label: "Demo staff review" },
-  { href: "/demo/account", label: "Demo account" },
-] as const;
+export default async function PageShell({ title, description, children }: Props) {
+  let demoNav: ReactNode = null;
+  let demoNotice: ReactNode = null;
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    const { DemoNavLinks, DemoNotice } = await import("./DemoShellExtras");
+    demoNav = <DemoNavLinks />;
+    demoNotice = <DemoNotice />;
+  }
 
-export default function PageShell({ title, description, children }: Props) {
-  const links = demoMode ? [...PRIMARY_LINKS, ...DEMO_LINKS] : PRIMARY_LINKS;
   return (
     <>
       <a href="#main-content" className="button">Skip to main content</a> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
@@ -50,12 +45,13 @@ export default function PageShell({ title, description, children }: Props) {
         <p><strong>AliAuction.ca</strong></p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
         <nav aria-label="Primary">
           <ul className="nav-list">
-            {links.map((link) => (
+            {PRIMARY_LINKS.map((link) => (
               <li key={link.href}><Link href={link.href}>{link.label}</Link></li>
             ))}
+            {demoNav}
           </ul>
         </nav>
-        <DemoBanner />
+        {demoNotice}
       </header>
       <main id="main-content">
         <h1>{title}</h1>

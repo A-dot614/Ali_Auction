@@ -68,18 +68,18 @@ test("read-only screens do not fetch data in real mode", () => {
 
 test("the demo notice is global and uses the exact required wording", () => {
   const shell = fs.readFileSync(path.join(webRoot, "src/components/PageShell.tsx"), "utf8");
-  assert.match(shell, /<DemoBanner\s*\/>/, "PageShell renders the banner on every screen");
-  const demoLib = fs.readFileSync(path.join(webRoot, "src/lib/demo.ts"), "utf8");
+  assert.match(shell, /import\("\.\/DemoShellExtras"\)/, "shell loads demo extras only in demo builds");
+  const demoLib = fs.readFileSync(path.join(webRoot, "src/lib/demo-copy.ts"), "utf8");
   assert.match(demoLib, /DEMO: not real, nothing is charged, no decision made/);
   const banner = fs.readFileSync(path.join(webRoot, "src/components/DemoBanner.tsx"), "utf8");
   assert.match(banner, /DEMO_BANNER_TEXT/);
   for (const rel of [
-    "src/app/demo/checkout/page.tsx",
-    "src/app/demo/shipping/page.tsx",
-    "src/app/demo/disputes/page.tsx",
-    "src/app/demo/account/page.tsx",
-    "src/app/demo/account/email/page.tsx",
-    "src/app/demo/bidding/page.tsx",
+    "src/app/demo/checkout/page.demo.tsx",
+    "src/app/demo/shipping/page.demo.tsx",
+    "src/app/demo/disputes/page.demo.tsx",
+    "src/app/demo/account/page.demo.tsx",
+    "src/app/demo/account/email/page.demo.tsx",
+    "src/app/demo/bidding/page.demo.tsx",
   ]) {
     const text = fs.readFileSync(path.join(webRoot, rel), "utf8");
     assert.match(text, /PageShell/, `${rel} must use the shell that carries the demo banner`);

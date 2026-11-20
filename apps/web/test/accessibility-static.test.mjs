@@ -11,7 +11,7 @@ function walk(dir, suffix) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...walk(full, suffix));
-    else if (entry.name.endsWith(suffix)) out.push(full);
+    else if (entry.name.endsWith(suffix) || (suffix === "page.tsx" && entry.name === "page.demo.tsx")) out.push(full);
   }
   return out;
 }

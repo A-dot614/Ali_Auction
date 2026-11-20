@@ -4,10 +4,11 @@
  * name requested for the demo. The value is read once at build time, never from
  * user input, and never forwarded to the API.
  *
+ * Demo-only copy and data live in separate modules that are imported only from
+ * demo-only routes/components, so a non-demo build cannot ship them.
+ *
  * No backend flag is changed here. Real bidding and real-money payments stay OFF.
  */
-
-export const DEMO_BANNER_TEXT = "DEMO: not real, nothing is charged, no decision made";
 
 export type DemoEnv = Record<string, string | undefined>;
 
@@ -23,5 +24,3 @@ export function assertDemoBuildAllowed(nodeEnv: string, isDemo: boolean): void {
     );
   }
 }
-
-export const demoMode = demoModeFromEnv(process.env as DemoEnv);
