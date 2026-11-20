@@ -14,6 +14,7 @@ RUN npx -y pnpm@9.15.4 install --frozen-lockfile
 FROM deps AS web-build
 COPY apps/web/ apps/web/
 COPY packages/shared/ packages/shared/
+COPY docs-implementation/ docs-implementation/
 ARG NEXT_PUBLIC_DEMO_MODE=false
 ARG NEXT_PUBLIC_API_ORIGIN=http://localhost:4000
 ENV NEXT_PUBLIC_DEMO_MODE=${NEXT_PUBLIC_DEMO_MODE}
@@ -52,6 +53,7 @@ CMD ["npx", "-y", "pnpm@9.15.4", "--filter", "@aliauction/web", "start"]
 FROM deps AS web-demo
 COPY apps/web/ apps/web/
 COPY packages/shared/ packages/shared/
+COPY docs-implementation/ docs-implementation/
 ARG NEXT_PUBLIC_API_ORIGIN=http://localhost:4000
 ENV NODE_ENV=development
 ENV NEXT_PUBLIC_DEMO_MODE=true
