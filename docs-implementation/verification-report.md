@@ -4,6 +4,10 @@ Nothing here records a decision, changes a P0 status or count, or marks an appro
 or sign-off as done. No product code, test, config, migration, Docker file or decision-log row was
 changed. No payment provider is named or chosen. Both feature flags remain false.
 
+**Clean run at `5affe02` passed: exit 0, 48/48 API files and 396/396 API tests, 46/46 web tests,
+1/1 shared test (1829.82s). This confirms the earlier failures below were environmental — a local
+credential mismatch and a database that became unavailable — not code failures.**
+
 ## Failures first — step 1e
 
 **First run FAILED.** `npx -y pnpm@9.15.4 -r test -- --reporter=verbose` exited **1**:
@@ -155,5 +159,63 @@ Each item below is an untested possibility, not a recommendation or decision.
 - **Decision and readiness gaps are unchanged:** 34 of 35 decision rows remain empty, FR-021 still
   needs confirmation by the product owner of record, FR-042 is NOT MET, and no approval, legal
   review, security review, restore drill or sign-off is recorded as done.
+
+## Clean-run attempt at 5affe02
+
+Goal: one clean, honest full-suite result on commit `5affe02f79b2c672024d530439deb1541da243d4`,
+obtained by fixing only the local environment. No committed file was edited to hide the credential
+mismatch; no `.env.example`, Docker file, test, config or decision-log row was changed.
+
+Values below are masked as `dev-only` placeholders. The literal values were taken from
+`docker/.env.example` (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) and passed only as an
+inline `DATABASE_URL`; no URL was written to a tracked file. Inline form used throughout:
+
+`DATABASE_URL='postgresql://aliauction:<dev-only password from docker/.env.example>@localhost:5433/aliauction_dev'`
+
+### Gate and environment
+
+- `git rev-parse HEAD` = `5affe02f79b2c672024d530439deb1541da243d4` — matched.
+- `git status --short` showed only `?? docs/DESIGN-shopify.md` — untouched and not committed.
+- No test process was running. Containers at gate time were `aliauction-postgres` (host port 5435)
+  and `aliauction-redis` (host port 6382), both healthy, from a different Compose service set.
+- `docker compose up -d db redis` was run once. Compose recreated `aliauction-redis` and created
+  `aliauction-db`; it reported `aliauction-postgres` as an orphan and left it untouched. Both `db`
+  and `redis` then reported healthy (`5433->5432`, `6380->6379`).
+
+### Connectivity and migrations
+
+- Connectivity through the project's own `pg` tooling:
+  `DATABASE_URL='…' npx -y pnpm@9.15.4 exec tsx -e 'import { query } from "./src/db.ts"; query("SELECT 1 AS ok") …'`
+  → `CONNECT_OK=1`, exit 0.
+- Migration command, run once:
+  `DATABASE_URL='…' npx -y pnpm@9.15.4 --filter @aliauction/api migrate:up`
+  → `No migrations to run!` / `Migrations complete!`, exit 0.
+
+### Full-suite result
+
+One command, alone, with the maximum timeout, output redirected to the git-ignored
+`logs/clean-run-5affe02.log` (not `/tmp`, not committed):
+
+`DATABASE_URL='…' npx -y pnpm@9.15.4 -r test -- --reporter=verbose > logs/clean-run-5affe02.log 2>&1`
+
+**Exit 0 — clean pass.** Totals:
+
+| Package | Result | Duration |
+|---|---|---|
+| API (vitest) | 48 passed (48 files); 396 passed (396 tests) | 1829.82s (tests 98%, import 2%) |
+| Web (node:test) | 46 tests, 46 pass, 0 fail, 0 skipped | 12538.78ms |
+| Shared (node:test) | 1 test, 1 pass, 0 fail, 0 skipped | 933.78ms |
+
+The log contains no `FAIL` lines, no `28P01`, `57P01` or `57P03` database errors, and no
+`ERR_PNPM` failure. No container was stopped, restarted or recreated while the suite ran; no other
+heavy command was started during the run. After the run completed, a server restart changed the
+visible Compose set to api/redis/web plus the untouched orphan `aliauction-postgres`; this is
+recorded for accuracy and required no action.
+
+### Conclusion
+
+The earlier full-suite failures were environmental: the root `.env` credential mismatch (28P01)
+and the database becoming unavailable mid-run (57P03/57P01). With only the inline environment
+corrected, the full suite passes on this commit. No source, test, config or flag was changed.
 
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
