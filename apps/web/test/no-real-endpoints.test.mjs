@@ -68,7 +68,15 @@ test("read-only screens do not fetch data in real mode", () => {
 
 test("the demo notice is global and uses the exact required wording", () => {
   const shell = fs.readFileSync(path.join(webRoot, "src/components/PageShell.tsx"), "utf8");
-  assert.match(shell, /import\("\.\/DemoShellExtras"\)/, "shell loads demo extras only in demo builds");
+  assert.ok(
+    !/\/demo|demo-data|DemoShellExtras|DemoSearchResults|DemoCategoryListings|DEMO: not real/.test(shell),
+    "real shell must not import demo code, data or copy"
+  );
+
+  const demoLayout = fs.readFileSync(path.join(webRoot, "src/app/demo/layout.demo.tsx"), "utf8");
+  assert.match(demoLayout, /<DemoBanner \/>/, "demo layout renders the banner on every demo screen");
+  assert.match(demoLayout, /aria-label="Demo screens"/, "demo navigation is labelled");
+
   const demoLib = fs.readFileSync(path.join(webRoot, "src/lib/demo-copy.ts"), "utf8");
   assert.match(demoLib, /DEMO: not real, nothing is charged, no decision made/);
   const banner = fs.readFileSync(path.join(webRoot, "src/components/DemoBanner.tsx"), "utf8");
@@ -82,7 +90,7 @@ test("the demo notice is global and uses the exact required wording", () => {
     "src/app/demo/bidding/page.demo.tsx",
   ]) {
     const text = fs.readFileSync(path.join(webRoot, rel), "utf8");
-    assert.match(text, /PageShell/, `${rel} must use the shell that carries the demo banner`);
+    assert.match(text, /PageShell/, `${rel} must use the shared real-mode shell`);
   }
 });
 

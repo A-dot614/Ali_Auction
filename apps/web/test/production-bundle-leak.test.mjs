@@ -46,14 +46,16 @@ test("production bundle leak script checks every required demo-only string", () 
   assert.match(script, /cache/, "local webpack cache must be excluded from the shipped bundle scan");
 });
 
-test("no real-mode source file contains a demo-only string", () => {
+test("no real-mode source file contains a demo-only string or demo import", () => {
   const files = walk(path.join(webRoot, "src")).filter((file) => !isDemoOnly(file));
+  const demoModules = /demo-data|demo-orders|demo-disputes|demo-payments|demo-shipping|demo-copy|DemoBanner|DemoShellExtras|DemoSearchResults|DemoCategoryListings/;
   for (const file of files) {
     const text = fs.readFileSync(file, "utf8");
     for (const needle of TEXT_NEEDLES) {
       assert.ok(!text.includes(needle), `${path.relative(webRoot, file)} must not contain "${needle}"`);
     }
     assert.ok(!DEMO_ROUTE.test(text), `${path.relative(webRoot, file)} must not contain a /demo route`);
+    assert.ok(!demoModules.test(text), `${path.relative(webRoot, file)} must not import demo modules`);
   }
 });
 

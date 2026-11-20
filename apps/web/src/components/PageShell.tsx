@@ -6,9 +6,9 @@ import type { ReactNode } from "react";
  * landmark with a single h1, and a footer. Mobile-first, 320px-safe.
  * PLACEHOLDER COPY (docs/16 §8 #6) on all user-visible strings.
  *
- * Demo navigation and the demo notice are loaded only in a demo build. The
- * direct build-time env check lets the bundler remove that import entirely
- * from the non-demo bundle.
+ * This is a real-mode module: it imports no demo component, data or copy. The
+ * demo build adds its banner and demo navigation from a demo-only layout that
+ * is excluded from non-demo builds by the pageExtensions setting.
  */
 
 type Props = { title: string; description?: string; children: ReactNode };
@@ -29,15 +29,7 @@ const PRIMARY_LINKS = [
   { href: "/auth/register", label: "Register" },
 ] as const;
 
-export default async function PageShell({ title, description, children }: Props) {
-  let demoNav: ReactNode = null;
-  let demoNotice: ReactNode = null;
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-    const { DemoNavLinks, DemoNotice } = await import("./DemoShellExtras");
-    demoNav = <DemoNavLinks />;
-    demoNotice = <DemoNotice />;
-  }
-
+export default function PageShell({ title, description, children }: Props) {
   return (
     <>
       <a href="#main-content" className="button">Skip to main content</a> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
@@ -48,10 +40,8 @@ export default async function PageShell({ title, description, children }: Props)
             {PRIMARY_LINKS.map((link) => (
               <li key={link.href}><Link href={link.href}>{link.label}</Link></li>
             ))}
-            {demoNav}
           </ul>
         </nav>
-        {demoNotice}
       </header>
       <main id="main-content">
         <h1>{title}</h1>

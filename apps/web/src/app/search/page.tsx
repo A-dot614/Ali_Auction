@@ -1,19 +1,15 @@
-import type { ReactNode } from "react";
 import PageShell from "../../components/PageShell";
 import ScreenState from "../../components/ScreenState";
 
 // PLACEHOLDER COPY (docs/16 §8 #6): search form copy pending review.
+// Real mode has no catalogue connection yet. Demo listings are shown only on
+// demo-only routes, which are excluded from non-demo builds.
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ q?: string; category?: string; sort?: string }>;
 
 export default async function SearchPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  let results: ReactNode = <ScreenState state="empty" />;
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-    const { default: DemoSearchResults } = await import("../../components/DemoSearchResults");
-    results = <DemoSearchResults params={params} />;
-  }
   return (
     <PageShell title="Search" description="Find listings by keyword.">
       <form className="card" action="/search" method="get">
@@ -33,7 +29,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Searc
         </select>
         <button type="submit">Search</button> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
       </form>
-      {results}
+      <ScreenState state="empty" />
     </PageShell>
   );
 }
