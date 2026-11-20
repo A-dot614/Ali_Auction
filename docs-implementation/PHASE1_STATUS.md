@@ -924,3 +924,5 @@ count, or marks an approval, legal review, security review, restore drill or sig
 
 This section changes no P0 status or count (**24 met / 6 partial / 1 not met / 0 production-ready**);
 FR-042 remains NOT MET, and both feature flags stay false.
+
+Verification at `3cee3e6` and the read-only API test-suite timing diagnosis are in [`verification-report.md`](verification-report.md).
