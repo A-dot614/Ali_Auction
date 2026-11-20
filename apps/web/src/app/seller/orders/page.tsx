@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
 import ScaffoldPage from "../../../components/ScaffoldPage";
+
+export const metadata: Metadata = {
+  title: "Seller orders — AliAuction.ca",
+  description: "Orders for your listings.",
+};
 
 export const dynamic = "force-dynamic";
 

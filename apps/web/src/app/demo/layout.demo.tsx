@@ -1,6 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import DemoBanner from "../../components/DemoBanner";
+
+export const metadata: Metadata = {
+  title: { default: "Demo — AliAuction.ca", template: "%s | Demo — AliAuction.ca" },
+  description: "Web-only local simulation. Not real, nothing is charged, no decision made.",
+};
 
 /**
  * Demo-only layout. The `.demo.tsx` extension means Next only discovers this

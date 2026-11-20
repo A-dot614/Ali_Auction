@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import PageShell from "../../../components/PageShell";
 import NotEnabled from "../../../components/NotEnabled";
+
+export const metadata: Metadata = {
+  title: "Staff dispute review — AliAuction.ca",
+  description: "Staff dispute review is not enabled in this build.",
+};
 
 export const dynamic = "force-dynamic";
 

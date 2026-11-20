@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import PageShell from "../../components/PageShell";
 import NotEnabled from "../../components/NotEnabled";
+
+export const metadata: Metadata = {
+  title: "Checkout — AliAuction.ca",
+  description: "Payments are not enabled in this build.",
+};
 
 export const dynamic = "force-dynamic";
 

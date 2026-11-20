@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import PageShell from "../../components/PageShell";
 import ScreenState from "../../components/ScreenState";
 
 // PLACEHOLDER COPY (docs/16 §8 #6): search form copy pending review.
 // Real mode has no catalogue connection yet. Demo listings are shown only on
 // demo-only routes, which are excluded from non-demo builds.
+export const metadata: Metadata = {
+  title: "Search — AliAuction.ca",
+  description: "Find published listings by keyword and category.",
+};
+
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ q?: string; category?: string; sort?: string }>;

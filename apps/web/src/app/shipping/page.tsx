@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import PageShell from "../../components/PageShell";
 import NotEnabled from "../../components/NotEnabled";
+
+export const metadata: Metadata = {
+  title: "Shipping — AliAuction.ca",
+  description: "Shipping estimates are not enabled in this build.",
+};
 
 export const dynamic = "force-dynamic";
 

@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import ScaffoldPage from "../../../components/ScaffoldPage";
 
 // Demo category listings live on demo-only routes, excluded from non-demo builds.
+export const metadata: Metadata = {
+  title: "Category — AliAuction.ca",
+  description: "Category browse is a placeholder in this build.",
+};
+
 export const dynamic = "force-dynamic";
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {

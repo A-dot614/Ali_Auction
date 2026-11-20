@@ -1,7 +1,7 @@
 {
   "name": "AliAuction.ca",
   "short_name": "AliAuction",
-  "description": "Canadian auction marketplace (Phase 1 scaffold).",
+  "description": "Canadian C2C and B2C auction marketplace foundation.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import PageShell from "../../../components/PageShell";
 import ScreenState from "../../../components/ScreenState";
 import AuctionPanel from "../../../components/AuctionPanel";
@@ -6,6 +7,11 @@ import { gql } from "../../../lib/graphql";
 import { stateForFailure } from "../../../lib/error-state";
 
 // Data-driven page: resolved at request time so no API fetch happens at build.
+export const metadata: Metadata = {
+  title: "Listing — AliAuction.ca",
+  description: "Published listing details and status.",
+};
+
 export const dynamic = "force-dynamic";
 
 type Data = {

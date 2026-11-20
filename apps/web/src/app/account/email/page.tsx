@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import PageShell from "../../../components/PageShell";
 import NotEnabled from "../../../components/NotEnabled";
+
+export const metadata: Metadata = {
+  title: "Email change — AliAuction.ca",
+  description: "Email change is not enabled in this build.",
+};
 
 export const dynamic = "force-dynamic";
 
