@@ -234,6 +234,13 @@ header { padding: 12px 16px; border-bottom: 1px solid var(--border); background:
 .notification-list h3 { margin: 0 0 var(--space-1); font-size: var(--font-base); }
 .notification-list .ui-card { margin: 0; }
 
+/* Staff review queue: actions stay readable and reach a 44px target on mobile. */
+.review-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-3); }
+.review-list h3 { margin: 0 0 var(--space-1); font-size: var(--font-base); }
+.review-list .ui-card { margin: 0; }
+.review-actions { margin-top: var(--space-3); }
+.review-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
 @media (max-width: 767px) {
   .status-table thead { display: none; }
   .status-table, .status-table tbody, .status-table tr, .status-table td { display: block; width: 100%; }

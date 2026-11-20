@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import PageShell from "../../../components/PageShell";
 import {
   BACKEND_FLAG_ROWS,
   countDecisionStatuses,
   loadDecisionLog,
 } from "../../../lib/decision-log";
+
+export const metadata: Metadata = {
+  title: "Admin status — AliAuction.ca",
+  description: "Read-only build-time view of feature flags and owner decisions.",
+};
 
 // Read-only snapshot parsed from the decision log at build time.
 export const dynamic = "force-static";
@@ -17,9 +23,9 @@ export default function AdminStatusPage() {
       title="Admin status"
       description="Read-only build-time view of feature flags and owner decisions."
     >
-      <section className="card">
+      <section className="card ui-card">
         <h2>Feature flags</h2>
-        <table className="status-table responsive-table">
+        <table className="status-table responsive-table ui-table">
           <thead>
             <tr><th scope="col">Flag</th><th scope="col">State</th><th scope="col">Gate</th></tr>
           </thead>
@@ -35,13 +41,13 @@ export default function AdminStatusPage() {
         </table>
         <p className="muted">Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.</p>
       </section>
-      <section className="card">
+      <section className="card ui-card">
         <h2>Owner decisions</h2>
         <p>
           Parsed from <code>docs-implementation/decision-log.md</code> at build time:
           <strong>{summary}</strong>.
         </p>
-        <table className="status-table responsive-table">
+        <table className="status-table responsive-table ui-table">
           <thead>
             <tr>
               <th scope="col">Decision ID</th>
