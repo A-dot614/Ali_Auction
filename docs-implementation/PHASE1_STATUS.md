@@ -908,3 +908,19 @@ FR-042 remains NOT MET. No approval, legal review, security review, restore dril
 marked done.
 
 Real bidding and real-money payments stay OFF until every required decision-log row is filled and signed off.
+
+## Handoff docs
+
+Three documents support the Phase 1 handoff; none of them records a decision, changes a P0 status or
+count, or marks an approval, legal review, security review, restore drill or sign-off as done:
+
+- `README.md` — project summary, current status, repository layout, local run modes with and without
+  Docker, checks, feature flags and links to the implementation docs.
+- `docs-implementation/handoff.md` — what is built versus demo-only, what is blocked and by which
+  decision-log IDs, known issues, the read-only design commit audit and the order in which decisions
+  should be collected to unblock the most work.
+- `docs-implementation/decision-briefing.md` — a plain-language reading aid for all 35 decision
+  rows, grouped by owner role, with no option marked as chosen.
+
+This section changes no P0 status or count (**24 met / 6 partial / 1 not met / 0 production-ready**);
+FR-042 remains NOT MET, and both feature flags stay false.
