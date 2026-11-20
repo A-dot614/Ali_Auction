@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import { assertDemoBuildAllowed, demoMode } from "./src/lib/demo";
+
+// Build-time safety: demo behaviour can never be compiled into a production build.
+assertDemoBuildAllowed(process.env.NODE_ENV ?? "development", demoMode);
 
 /**
  * D9 security headers. Restrictive CSP; HSTS only in production. The API origin
