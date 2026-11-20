@@ -1,7 +1,17 @@
-import ScaffoldPage from "../../../components/ScaffoldPage";
+import type { Metadata } from "next";
+import PageShell from "../../../components/PageShell";
+import SellerProfileForm from "../../../components/SellerProfileForm";
 
+export const metadata: Metadata = {
+  title: "Seller onboarding — AliAuction.ca",
+  description: "Create a seller profile and submit it for verification.",
+};
 export const dynamic = "force-dynamic";
 
 export default function SellerOnboardingPage() {
-  return <ScaffoldPage title="Seller onboarding" description="Set up your seller profile." state="empty" />;
+  return (
+    <PageShell title="Seller onboarding" description="Verification requirements remain open; no documents are collected.">
+      <SellerProfileForm />
+    </PageShell>
+  );
 }
