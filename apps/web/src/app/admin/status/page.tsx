@@ -11,6 +11,7 @@ export const dynamic = "force-static";
 export default function AdminStatusPage() {
   const rows = loadDecisionLog();
   const counts = countDecisionStatuses(rows);
+  const summary = `${counts.decided} decided / ${counts.pending} pending`;
   return (
     <PageShell
       title="Admin status"
@@ -38,7 +39,7 @@ export default function AdminStatusPage() {
         <h2>Owner decisions</h2>
         <p>
           Parsed from <code>docs-implementation/decision-log.md</code> at build time:
-          <strong> {counts.decided} decided / {counts.pending} pending</strong>.
+          <strong>{summary}</strong>.
         </p>
         <table className="status-table responsive-table">
           <thead>

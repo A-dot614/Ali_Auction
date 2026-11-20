@@ -33,8 +33,10 @@ export const DEMO_ORDERS: DemoOrder[] = [
     totalMinor: 4100,
     currency: "CAD",
     events: [
+      { id: "demo-event-0", kind: "payment_failed_recorded", atIso: "2026-11-15T10:00:00.000Z", note: "Demo failed payment recorded; no charge attempted." },
       { id: "demo-event-1", kind: "dispute_opened", atIso: "2026-11-18T10:00:00.000Z", note: "Demo dispute opened; no policy applied." },
       { id: "demo-event-2", kind: "dispute_closed", atIso: "2026-11-19T10:00:00.000Z", note: "Demo dispute closed; no outcome decided." },
+      { id: "demo-event-5", kind: "refund_recorded", atIso: "2026-11-20T10:00:00.000Z", note: "Demo refund recorded; no money moved." },
     ],
   },
   {
