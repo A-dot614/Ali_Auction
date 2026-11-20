@@ -91,6 +91,27 @@ services:
       api:
         condition: service_healthy
 
+  # Separate profile and image: never replaces the real production-target web.
+  web-demo:
+    profiles:
+      - demo
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: web-demo
+      args:
+        NEXT_PUBLIC_DEMO_MODE: "true"
+        NEXT_PUBLIC_API_ORIGIN: "http://localhost:4000"
+    image: aliauction-web-demo:local
+    network_mode: "service:api"
+    environment:
+      NEXT_PUBLIC_DEMO_MODE: "true"
+      FEATURE_LIVE_BIDDING_ENABLED: "false"
+      FEATURE_REAL_MONEY_PAYMENTS_ENABLED: "false"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   aliauction_pgdata:
   aliauction_redisdata:
