@@ -55,6 +55,7 @@ export default function DemoHubPage() {
     <PageShell
       title="Demo hub"
       description="Every screen below is a local simulation. No decision is made and nothing is charged."
+      tone="cinematic"
     >
       <HomeSections
         featured={featured}

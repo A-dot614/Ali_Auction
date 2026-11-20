@@ -6,12 +6,21 @@ import type { ReactNode } from "react";
  * landmark with a single h1, and a footer. Mobile-first, 320px-safe.
  * PLACEHOLDER COPY (docs/16 §8 #6) on all user-visible strings.
  *
+ * Two design tracks share this shell: `light` for transactional screens and
+ * `cinematic` for marketing surfaces. The track sets canvas polarity only; it
+ * never changes data, flags, copy rules or behaviour.
+ *
  * This is a real-mode module: it imports no demo component, data or copy. The
  * demo build adds its banner and demo navigation from a demo-only layout that
  * is excluded from non-demo builds by the pageExtensions setting.
  */
 
-type Props = { title: string; description?: string; children: ReactNode };
+type Props = {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  tone?: "light" | "cinematic";
+};
 
 const PRIMARY_LINKS = [
   { href: "/", label: "Home" },
@@ -29,28 +38,56 @@ const PRIMARY_LINKS = [
   { href: "/auth/register", label: "Register" },
 ] as const;
 
-export default function PageShell({ title, description, children }: Props) {
+const FOOTER_LINKS = [
+  { href: "/about", label: "About" },
+  { href: "/help", label: "Help" },
+  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/refunds", label: "Refunds" },
+  { href: "/contact", label: "Contact" },
+] as const;
+
+export default function PageShell({ title, description, children, tone = "light" }: Props) {
   return (
-    <>
+    <div className="app-shell" data-track={tone}>
       <a href="#main-content" className="ui-button ui-button--secondary">Skip to main content</a> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
-      <header>
-        <p><strong>AliAuction.ca</strong></p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
-        <nav aria-label="Primary">
-          <ul className="nav-list">
-            {PRIMARY_LINKS.map((link) => (
-              <li key={link.href}><Link href={link.href}>{link.label}</Link></li>
-            ))}
-          </ul>
-        </nav>
+      <header className="shell-header">
+        <div className="shell-header__inner">
+          <p className="wordmark"><strong>AliAuction.ca</strong></p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+          <nav aria-label="Primary">
+            <ul className="nav-list">
+              {PRIMARY_LINKS.map((link) => (
+                <li key={link.href}><Link href={link.href}>{link.label}</Link></li>
+              ))}
+            </ul>
+          </nav>
+          <div className="shell-actions">
+            <Link className="ui-button ui-button--secondary" href="/auth/login">Sign in</Link> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+            <Link className="ui-button ui-button--primary" href="/auth/register">Register</Link> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+          </div>
+        </div>
       </header>
       <main id="main-content">
-        <h1>{title}</h1>
-        {description ? <p className="muted">{description}</p> : null}
-        {children}
+        <section className={tone === "cinematic" ? "cinema-hero" : "page-intro"}>
+          <div className="section-inner">
+            <h1 className="page-title">{title}</h1>
+            {description ? <p className="page-lead muted">{description}</p> : null}
+          </div>
+        </section>
+        <div className="page-content">{children}</div>
       </main>
-      <footer>
-        <p className="muted">AliAuction.ca — Phase 1 scaffold. Not a launch-ready marketplace.</p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+      <footer className="shell-footer">
+        <div className="shell-footer__inner">
+          <p className="muted">AliAuction.ca — Phase 1 scaffold. Not a launch-ready marketplace.</p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+          <nav aria-label="Footer">
+            <ul className="footer-links">
+              {FOOTER_LINKS.map((link) => (
+                <li key={link.href}><Link href={link.href}>{link.label}</Link></li>
+              ))}
+            </ul>
+          </nav>
+        </div>
       </footer>
-    </>
+    </div>
   );
 }

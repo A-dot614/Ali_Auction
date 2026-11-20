@@ -71,6 +71,7 @@ export default async function HomePage() {
     <PageShell
       title="AliAuction.ca"
       description="Canadian C2C and B2C auction marketplace (Phase 1 foundation)."
+      tone="cinematic"
     >
       <HomeSections
         featured={featured}

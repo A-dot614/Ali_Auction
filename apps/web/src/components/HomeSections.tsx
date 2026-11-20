@@ -40,15 +40,16 @@ export default function HomeSections({
 }) {
   return (
     <>
-      <section className="card ui-card" aria-labelledby="home-hero-heading">
-        <h2 id="home-hero-heading">A marketplace built in the open</h2>
+      <section className="hero-panel" aria-labelledby="home-hero-heading">
+        <p className="eyebrow">Phase 1 foundation</p> {/* PLACEHOLDER COPY (docs/16 §8 #6) */}
+        <h2 id="home-hero-heading" className="section-display">A marketplace built in the open</h2>
         <p className="muted">
           Browse published listings, follow their status and create seller drafts. Rules that are
           still open are labelled, not guessed.
         </p>
-        <p>
-          <Link className="ui-button ui-button--primary" href={browseHref}>Browse listings</Link>{" "}
-          <Link className="ui-button ui-button--secondary" href={sellHref}>Start selling</Link>
+        <p className="hero-actions">
+          <Link className="ui-button ui-button--primary" href={browseHref}>Browse listings</Link>
+          <Link className="ui-button ui-button--quiet" href={sellHref}>Start selling</Link>
         </p>
       </section>
 
